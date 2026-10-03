@@ -30,6 +30,8 @@ export interface AnalyzeDeps {
   modelName: string; // part of the cache key
   cache?: Cache;
   cellBoxes: Map<string, CellBox>;
+  // Debug hook (CLI --save-crops): exactly what the model saw and answered, cache hits included.
+  onModelCall?: (call: { zone_id: string; prompt: string; crop: Buffer; content: string }) => void | Promise<void>;
 }
 
 export interface CellResult {
@@ -141,6 +143,7 @@ export async function analyzeZone(
       const key = cacheKey(crop, p, format, deps.modelName);
       const cached = await deps.cache?.get(key);
       const response = cached ?? (await deps.model({ prompt: p, image: crop, format }));
+      await deps.onModelCall?.({ zone_id: zoneId, prompt: p, crop, content: response.content });
       timings = addTimings(timings, response.timings);
       const parsed = parseZoneAnswer(response.content, cellIds);
       if (!parsed.ok) {

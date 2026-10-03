@@ -34,7 +34,7 @@ export function buildZonePrompt(schema: PageSchema, zoneId: string, opts: { cell
     ? `, row-major.\nTable rows: ${zone.rows.join('; ')}\nColumns: ${zone.columns.join('; ')}`
     : ` in this order:\n${fields.map((f, i) => `${i + 1}. ${cellLabel(f)}`).join('\n')}`;
   const checkbox = fields.some((f) => f.type === 'checkbox') ? ' Checkbox: "x" if ticked, else "".' : '';
-  const rules = `Copy handwriting verbatim. "" = empty, null = illegible. Never guess.${checkbox} Ignore names, ID numbers, phone numbers, addresses.`;
+  const rules = `Copy handwriting verbatim. "" = empty, null only if there is writing you cannot read at all. Never invent a value.${checkbox} Ignore names, ID numbers, phone numbers, addresses.`;
 
   return {
     prompt: `${head}${layout}\n${rules}`,
