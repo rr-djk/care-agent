@@ -137,6 +137,26 @@ test('upload replay: one page, one original, one PENDING_AI transition; sha mism
   assert.equal((await t.upload('sup-01', sid, randomUUID(), { midwife_id: 'sup-01' })).status, 403);
 });
 
+test('session with a client-generated id: idempotent replay, another midwife gets 409, bad id 400', async () => {
+  const t = await setup();
+  const id = randomUUID();
+  const create = (user: string, body: object) => t.call(user, '/api/sessions', { method: 'POST', ...t.json(body) });
+  const first = await create('sf-01', { id, fiche_number: '7' });
+  assert.equal(first.status, 200);
+  assert.equal((await first.json()).id, id);
+  await t.upload('sf-01', id, randomUUID());
+  const replay = await create('sf-01', { id, fiche_number: 'ignored' });
+  assert.equal(replay.status, 200);
+  const stored = await replay.json();
+  assert.deepEqual([stored.id, stored.fiche_number, stored.page_ids.length], [id, '7', 1]);
+  assert.equal(t.count('sessions'), 1);
+  const other = await create('sf-02', { id });
+  assert.equal(other.status, 409);
+  assert.equal((await other.json()).code, 'session_id_taken');
+  assert.equal((await create('sf-01', { id: 'nope' })).status, 400);
+  await t.settle();
+});
+
 test('illegal transition is 409 and leaves the state unchanged', async () => {
   const t = await setup(null); // no analyzer: the page stays PENDING_AI
   const sid = await t.newSession();

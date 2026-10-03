@@ -44,6 +44,7 @@ interface FixturePage {
 }
 let pages: FixturePage[] = [];
 let uploads = 0;
+let sessionId = '';
 let emit: (event: object) => void = () => {};
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -103,12 +104,16 @@ export const api = {
     if (pin !== '123456') fail('invalid_credentials', 'invalid credentials');
     return { token: 'fixture', role: 'midwife', userId: user_id };
   },
-  async createSession(fiche_number?: string, facility?: string): Promise<Session> {
-    pages = [];
-    uploads = 0;
-    return { id: 'fixture-session', midwife_id: 'sf-01', fiche_number, facility, started_at: new Date().toISOString(), page_ids: [] };
+  async createSession(session: Session): Promise<Session> {
+    if (session.id !== sessionId) {
+      pages = [];
+      uploads = 0;
+      sessionId = session.id;
+    }
+    return session;
   },
-  async uploadPage(meta: RecordPage, _image: File): Promise<RecordPage> {
+  async health(): Promise<void> {},
+  async uploadPage(meta: RecordPage, _image: Blob): Promise<RecordPage> {
     uploads++;
     const broken = !meta.replaces && uploads % 2 === 0; // every second new page: the AI is unavailable
     const page: FixturePage = { id: meta.id, type: meta.page_type ?? 3, fields: meta.replaces ? CLEAN : READ, state: 'PENDING_AI', superseded: false, reviewed: new Set() };
@@ -129,7 +134,7 @@ export const api = {
       }
       emit({ type: 'record_ready', record_id: meta.session_id });
     }, 1200);
-    return { ...meta, state: 'PENDING_AI' };
+    return { ...meta, state: 'PENDING_AI' }; // same sha256 back, like the server
   },
   async openAnalysis(_sessionId: string, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> {
     const enc = new TextEncoder();

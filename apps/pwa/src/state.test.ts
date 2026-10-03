@@ -1,6 +1,6 @@
 import type { ExtractedField, ReviewItem, ReviewQueue, Status, StreamEvent } from '@care-agent/schema';
 import { describe, expect, it } from 'vitest';
-import { activeItemMsg, countByStatus, currentItem, groupFields, initialState, pageStateLabel, reducer, toReview, type Action, type State } from './state';
+import { activeItemMsg, countByStatus, currentItem, groupFields, initialState, pageStateLabel, queueLabel, reducer, toReview, type Action, type State } from './state';
 
 const field = (field_id: string, status: Status, value: ExtractedField['value'] = 'x'): ExtractedField => ({
   field_id,
@@ -50,7 +50,7 @@ describe('reducer', () => {
     ]);
     expect(s.messages.map((m) => [m.from, m.kind, m.kind === 'text' ? m.text : m.kind === 'summary' ? m.pageId : ''])).toEqual([
       ['bot', 'text', 'Session démarrée. Photographiez une page du registre.'],
-      ['user', 'text', 'Photo envoyée : page 3, Grossesse'],
+      ['user', 'text', 'Photo enregistrée : page 3, Grossesse'],
       ['bot', 'text', 'Page reçue, analyse en cours…'],
       ['bot', 'summary', 'p1'],
       ['bot', 'text', 'Toutes les pages sont analysées.'],
@@ -152,7 +152,7 @@ describe('manual entry offer, retake and chat stream', () => {
     expect(s.order).toEqual(['p1', 'p2']);
     expect(s.pages.p1.superseded).toBe(true);
     expect(s.pages.p2.superseded).toBe(false);
-    expect(s.messages[1]).toMatchObject({ kind: 'text', text: 'Nouvelle photo envoyée : page 3, Grossesse', hint: 'Elle remplace la photo précédente.' });
+    expect(s.messages[1]).toMatchObject({ kind: 'text', text: 'Nouvelle photo enregistrée : page 3, Grossesse', hint: expect.stringContaining('Elle remplace la photo précédente.') });
   });
 
   it('chat tokens build one streaming bot message that done closes', () => {
@@ -171,5 +171,43 @@ describe('manual entry offer, retake and chat stream', () => {
     expect(pageStateLabel({ ...page, failed: true })).toBe('échec');
     expect(pageStateLabel({ ...page, superseded: true }, progress)).toBe('remplacée');
     expect(pageStateLabel({ ...page, validated: true })).toBe('validée');
+  });
+
+  it('a replayed event sequence (stream reconnect) does not duplicate bubbles', () => {
+    const events = [
+      ev({ type: 'page_received', page_id: 'p1' }),
+      ev({ type: 'page_read', page_id: 'p1', fields }),
+      ev({ type: 'field_flagged', page_id: 'p1', field_id: 'c', reason: 'r' }),
+      ev({ type: 'record_ready', record_id: 's1' }),
+    ];
+    const once = run([{ type: 'page_added', pageId: 'p1', pageType: 3 }, ...events]);
+    const twice = run(events, once);
+    expect(twice.messages).toEqual(once.messages);
+    expect(twice.pages.p1.flagged).toEqual(['c']);
+    // a genuinely new page after the replay still shows up, with its own record_ready
+    const more = run([{ type: 'page_added', pageId: 'p2', pageType: 3 }, ev({ type: 'page_received', page_id: 'p2' }), ev({ type: 'page_read', page_id: 'p2', fields }), ev({ type: 'record_ready', record_id: 's1' })], twice);
+    expect(more.messages.filter((m) => m.kind === 'text' && m.text === 'Toutes les pages sont analysées.')).toHaveLength(2);
+    // chat events are never deduplicated
+    expect(run([ev({ type: 'token', text: 'a' }), ev({ type: 'done' }), ev({ type: 'token', text: 'a' })]).messages).toHaveLength(2);
+  });
+
+  it('restoring a session is idempotent and keeps the queued pages', () => {
+    const session = { id: 's1', midwife_id: 'sf-01', started_at: 't', page_ids: [] };
+    const restored = { type: 'session_restored' as const, session, pages: [{ id: 'p1', pageType: 3 }, { id: 'p2', pageType: 3, replaces: 'p1' }] };
+    const s = run([restored, restored]);
+    expect(s.order).toEqual(['p1', 'p2']);
+    expect(s.pages.p1.superseded).toBe(true);
+    expect(s.messages).toHaveLength(1);
+  });
+
+  it('queue labels (French) follow the local state', () => {
+    const idle = { offline: false, sending: false, analysed: false };
+    expect(queueLabel({ state: 'CAPTURED', attempts: 0 }, idle)).toBe("Enregistrée sur l'appareil (chiffrée)");
+    expect(queueLabel({ state: 'CAPTURED', attempts: 0 }, { ...idle, offline: true })).toBe('En attente de traitement IA');
+    expect(queueLabel({ state: 'CAPTURED', attempts: 2 }, idle)).toBe('En attente de traitement IA');
+    expect(queueLabel({ state: 'CAPTURED', attempts: 0 }, { ...idle, sending: true })).toBe('Envoi en cours…');
+    expect(queueLabel({ state: 'UPLOADED', attempts: 0 }, idle)).toBe('Envoyée — analyse en cours');
+    expect(queueLabel({ state: 'UPLOADED', attempts: 0 }, { ...idle, analysed: true })).toBeNull();
+    expect(queueLabel({ state: 'SYNC_FAILED', attempts: 0, error: 'sha256_mismatch' }, idle)).toBe("Échec d'envoi : La photo a été corrompue pendant l'envoi, reprenez-la.");
   });
 });

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
+import { z } from 'zod';
 import { RecordPage, type StreamEvent } from '@care-agent/schema';
 import { login, userForToken, type AuthUser } from './auth';
 import { deterministicReply, NOTHING_TO_REVIEW, type ChatTarget } from './chat';
@@ -87,8 +88,27 @@ export function createApp({ db, originals, events, worker, model, inkOnly, chatM
     midwifeOnly(user);
     const body = await c.req.json().catch(() => ({}));
     const text = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
+    // Offline: the phone creates the session id; a replay returns the stored session (idempotent by id).
+    if (body.id !== undefined && !z.string().uuid().safeParse(body.id).success) throw new ApiError(400, 'bad_request', '"id" must be a UUID');
+    if (body.id) {
+      const stored = db.prepare('SELECT id, midwife_id, fiche_number, facility, started_at FROM sessions WHERE id = ?').get(body.id) as
+        | { id: string; midwife_id: string; fiche_number: string | null; facility: string | null; started_at: string }
+        | undefined;
+      if (stored) {
+        if (stored.midwife_id !== user.id) throw new ApiError(409, 'session_id_taken', 'this session id belongs to another midwife');
+        const pageIds = db.prepare('SELECT id FROM pages WHERE session_id = ? ORDER BY captured_at, rowid').all(stored.id) as { id: string }[];
+        return c.json({
+          id: stored.id,
+          midwife_id: stored.midwife_id,
+          fiche_number: stored.fiche_number ?? undefined,
+          facility: stored.facility ?? undefined,
+          started_at: stored.started_at,
+          page_ids: pageIds.map((p) => p.id),
+        });
+      }
+    }
     const session = {
-      id: randomUUID(),
+      id: body.id ?? randomUUID(),
       midwife_id: user.id,
       fiche_number: text(body.fiche_number),
       facility: text(body.facility),
