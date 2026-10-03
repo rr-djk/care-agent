@@ -1,13 +1,13 @@
 ## PWA (phone app)
 
-Vite + React + TypeScript, French UI (labels from `label_fr` in `packages/schema/pages/*.json`). Login, WhatsApp-style chat, page photo upload, analysis stream, field correction and page confirmation. Offline queueing is step 9; the service worker only precaches the app shell so the app opens offline.
+Vite + React + TypeScript, French UI (labels from `label_fr` in `packages/schema/pages/*.json`). Login, WhatsApp-style chat, page photo upload, analysis stream, then a guided review: the bot asks about one doubtful field at a time (Confirmer / Corriger / Reprendre la photo / Laisser illisible, progress « 2/5 champs vérifiés »), « Tout est vérifié pour la page N » + Confirmer la page, « Saisie manuelle » when the AI fails, free text answers sent to `/api/chat`, a page list for multi-page sessions. Offline queueing is step 9; the service worker only precaches the app shell so the app opens offline.
 
 ### Run
 
 - `make pwa` (or `npm run dev -w @care-agent/pwa`): serves `0.0.0.0:5173`. `/api` is proxied to `API_URL` (default `http://localhost:8787`, streaming included), so start the server too (`make server`).
 - HTTPS when the certificate files exist, plain HTTP otherwise. Env: `PWA_CERT`, `PWA_KEY` (default `<repo>/data/certs/{cert,key}.pem`, git-ignored). `localhost` is a secure context, so the camera and the file input work over plain HTTP on the laptop.
 - `npm run build -w @care-agent/pwa`: static build in `apps/pwa/dist` (git-ignored).
-- `VITE_FIXTURES=1 make pwa`: canned API and a canned analysis (one pregnancy page with flagged fields), no server or model needed. Login: any id, PIN `123456`.
+- `VITE_FIXTURES=1 make pwa`: canned API, no server or model needed: the 1st page has a doubt and an illegible field, the 2nd page fails (AI unavailable) and offers « Saisie manuelle », a retake gives a clean page. Login: any id, PIN `123456`.
 - Tests: `npm test -w @care-agent/pwa` (NDJSON reader, reducer); typecheck: `npm run typecheck -w @care-agent/pwa`. Both run in `make check`.
 
 ### Phone over the LAN (HTTPS)
