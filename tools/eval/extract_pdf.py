@@ -382,6 +382,8 @@ def extract_page(page, page_no, issues):
         for c in s.get("chars", []):
             b = b.union(c[1])
         masks.append(b.pad(2))
+    # The page header of the mother's postpartum pages prints the name ("MÈRE — <name>"): masked, never a cell.
+    masks += [s.pad(2) for s in printed if s.text.startswith("MÈRE")]
     return out, masks, forbidden, (printed, shapes)
 
 
