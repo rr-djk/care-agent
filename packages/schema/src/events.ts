@@ -6,7 +6,7 @@ export const ChatEvent = z.discriminatedUnion('type', [
   z.object({ type: z.literal('token'), text: z.string() }),
   z.object({ type: z.literal('ping') }),
   z.object({ type: z.literal('done') }),
-  z.object({ type: z.literal('error'), code: z.string(), text: z.string() }),
+  z.object({ type: z.literal('error'), code: z.string(), text: z.string(), page_id: z.string().optional() }),
 ]);
 
 export const AnalysisEvent = z.discriminatedUnion('type', [
