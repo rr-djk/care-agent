@@ -1,1 +1,7 @@
-@care-agent/eval: placeholder workspace (see docs/Care_Agent-Dev_Plan.md).
+@care-agent/eval: ground truth, zones and a minimal eval harness (see docs/Care_Agent-Dev_Plan.md, step 3).
+
+- `make pages`: `dedupe.mjs`, `split.mjs` -> `data/pages.json`, `data/split.json`.
+- `make truth`: `extract_pdf.py` (ground truth + identifier masks from the specimen PDF), `zones.py` (zones per layout), `zones_preview.py` (overlays in `docs/zones-pNN.png`). Read-only on `DATASETS_DIR`.
+- `make eval ARGS='--extractor truth|empty|<predictions.json> --split tune|calibrate|verify|all --pages p2,p3,p4'`: `run.mjs`, results in `eval-results/` (git-ignored).
+- `normalize.py` / `normalize.mjs`: the comparison rule, same cases in `data/normalize_cases.json`.
+- `data/real_photos_labels.template.json`: template to hand-label the 5 real photos (`docs/labeling.md`).
