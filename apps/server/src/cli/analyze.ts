@@ -1,5 +1,6 @@
-// Usage: npm run analyze -w @care-agent/server -- <page.png | page_no> [--layout L] [--zones id1,id2] [--json out.json]
-import { writeFile } from 'node:fs/promises';
+// Usage: npm run analyze -w @care-agent/server -- <page.png | page_no> [--layout L] [--zones id1,id2] [--json out.json] [--save-crops dir]
+// --save-crops writes, per zone sent to the model: <zone>.png (the crop), <zone>.prompt.txt and <zone>.answer.json.
+import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { PAGE_LAYOUTS, type PageLayout } from '@care-agent/schema';
@@ -9,11 +10,11 @@ import { defaultDeps, loadPageImage, pageLayout, pagePngPath } from './pages';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
-  options: { layout: { type: 'string' }, zones: { type: 'string' }, json: { type: 'string' } },
+  options: { layout: { type: 'string' }, zones: { type: 'string' }, json: { type: 'string' }, 'save-crops': { type: 'string' } },
 });
 const target = positionals[0];
 if (!target) {
-  console.error('usage: analyze <page.png | page_no> [--layout L] [--zones id1,id2] [--json out.json]');
+  console.error('usage: analyze <page.png | page_no> [--layout L] [--zones id1,id2] [--json out.json] [--save-crops dir]');
   process.exit(1);
 }
 const pageNo = /^\d+$/.test(target) ? Number(target) : undefined;
@@ -29,7 +30,17 @@ let totals = { prefill: 0, gen: 0, tokens: 0, wall: 0, skipped: 0, hits: 0 };
 try {
   const page = await loadPageImage(pageNo !== undefined ? pagePngPath(pageNo) : resolve(target));
   console.log(`${pad('zone', 18)} ${pad('field', 44)} ${pad('verbatim', 22)} ${pad('status', 14)} ${pad('ink', 6)}`);
-  const result = await analyzePage(page, layout, defaultDeps(layout), {
+  const deps = defaultDeps(layout);
+  const cropDir = values['save-crops'] && resolve(process.env.INIT_CWD ?? '.', values['save-crops']);
+  if (cropDir) {
+    await mkdir(cropDir, { recursive: true });
+    deps.onModelCall = async ({ zone_id, prompt, crop, content }) => {
+      await writeFile(`${cropDir}/${zone_id}.png`, crop);
+      await writeFile(`${cropDir}/${zone_id}.prompt.txt`, prompt + '\n');
+      await writeFile(`${cropDir}/${zone_id}.answer.json`, content + '\n');
+    };
+  }
+  const result = await analyzePage(page, layout, deps, {
     zones: values.zones?.split(','),
     onProgress: (z) => {
       for (const c of z.cells) {
