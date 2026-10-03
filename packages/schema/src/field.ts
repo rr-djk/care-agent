@@ -48,5 +48,7 @@ export const ExtractedField = z.object({
   calibrated: z.number().min(0).max(1).optional(),
   source_page: z.number().int(),
   evidence: z.string().optional(), // crop id
+  // Why a flagged field is in that state: 'manual' (to type), 'corrected' (typed value still failing), 'left_illegible'.
+  reason: z.string().optional(),
 });
 export type ExtractedField = z.infer<typeof ExtractedField>;

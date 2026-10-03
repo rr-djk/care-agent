@@ -39,6 +39,7 @@ export const RecordPage = z.object({
   state: LifecycleState,
   flags: z.array(Flag),
   quality: QualityResult.optional(),
+  replaces: z.string().uuid().optional(), // retake: id of the page this one replaces
 });
 export type RecordPage = z.infer<typeof RecordPage>;
 

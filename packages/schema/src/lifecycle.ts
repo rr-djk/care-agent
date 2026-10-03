@@ -16,7 +16,8 @@ export const LifecycleState = z.enum([
 ]);
 export type LifecycleState = z.infer<typeof LifecycleState>;
 
-export const Flag = z.enum(['LOW_QUALITY']);
+// SUPERSEDED: a retake replaced this page (the old page leaves the review queue).
+export const Flag = z.enum(['LOW_QUALITY', 'SUPERSEDED']);
 export type Flag = z.infer<typeof Flag>;
 
 export const ALLOWED_TRANSITIONS: Record<LifecycleState, readonly LifecycleState[]> = {
