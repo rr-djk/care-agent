@@ -42,3 +42,22 @@ input, select { width: 100%; padding: 10px; border: 1px solid #c8c8c8; border-ra
 .field-actions, .field-edit { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .field-actions button, .field-edit button { padding: 4px 6px; font-size: 0.8em; }
 .field-edit input, .field-edit select { flex: 1 1 100%; }
+
+.pages { display: flex; gap: 6px; overflow-x: auto; list-style: none; margin: 0; padding: 6px 16px; background: #f7f5f0; border-bottom: 1px solid #e0dcd3; font-size: 0.8em; }
+.pages li { flex: none; display: flex; flex-direction: column; padding: 2px 8px; border-radius: 8px; background: #fff; border: 1px solid #e0dcd3; }
+.pages li span { color: #667781; }
+.pages li.superseded { opacity: 0.55; text-decoration: line-through; }
+
+.item .progress { color: #667781; font-size: 0.8em; margin-bottom: 2px; }
+.item .item-text { font-weight: 600; }
+.item.illegible, .item.unread, .item.manual { border-left: 3px solid #d9534f; padding-left: 8px; }
+.item.doubt { border-left: 3px solid #e0a800; padding-left: 8px; }
+.read-value { margin: 4px 0 0 !important; }
+.read-value strong { background: #fff3cd; padding: 1px 6px; border-radius: 6px; }
+.item-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.item-edit { margin-top: 8px; display: grid; gap: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border-radius: 16px; padding: 6px 14px; background: #e7f3ef; border-color: #075e54; color: #075e54; }
+.wide { width: 100%; margin-top: 8px; }
+.chat-input { display: flex; gap: 8px; }
+.chat-input input { flex: 1; }

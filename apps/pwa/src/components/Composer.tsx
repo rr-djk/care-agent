@@ -3,15 +3,18 @@ import { PAGE_TYPES } from '../state';
 
 interface Props {
   hasSession: boolean;
+  canChat: boolean; // a review question is open: free text goes to the chat agent
+  onChat: (text: string) => void;
   onNewSession: (fiche: string, facility: string) => void;
   onCapture: (file: File, pageType: number) => void;
 }
 
-export function Composer({ hasSession, onNewSession, onCapture }: Props) {
+export function Composer({ hasSession, canChat, onChat, onNewSession, onCapture }: Props) {
   const [form, setForm] = useState(false);
   const [fiche, setFiche] = useState('');
   const [facility, setFacility] = useState('');
   const [pageType, setPageType] = useState(3);
+  const [text, setText] = useState('');
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -19,8 +22,21 @@ export function Composer({ hasSession, onNewSession, onCapture }: Props) {
     setForm(false);
   };
 
+  const send = (e: FormEvent) => {
+    e.preventDefault();
+    if (!text.trim()) return;
+    onChat(text.trim());
+    setText('');
+  };
+
   return (
     <footer className="composer">
+      {canChat && (
+        <form className="chat-input" onSubmit={send}>
+          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Tapez la valeur ou une réponse…" aria-label="Message" />
+          <button className="primary">Envoyer</button>
+        </form>
+      )}
       {form && (
         <form onSubmit={submit}>
           <input value={fiche} onChange={(e) => setFiche(e.target.value)} placeholder="Numéro de fiche" aria-label="Numéro de fiche" />

@@ -11,9 +11,11 @@ interface RowProps {
   field: ExtractedField;
   editable: boolean;
   onPatch: (fieldId: string, value: Value) => Promise<void>;
+  onConfirm: (fieldId: string) => void;
+  onRetake: () => void;
 }
 
-function FieldRow({ field, editable, onPatch }: RowProps) {
+function FieldRow({ field, editable, onPatch, onConfirm, onRetake }: RowProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const isCheckbox = fieldDef(field.field_id)?.type === 'checkbox';
@@ -46,7 +48,7 @@ function FieldRow({ field, editable, onPatch }: RowProps) {
           </div>
         ) : (
           <div className="field-actions">
-            <button disabled title="Bientôt">Confirmer</button>
+            {field.status !== 'KNOWN' && field.value !== null && field.value !== '' && <button onClick={() => onConfirm(field.field_id)}>Confirmer</button>}
             <button
               onClick={() => {
                 setDraft(isCheckbox ? String(field.value === true) : typeof field.value === 'string' ? field.value : '');
@@ -55,7 +57,7 @@ function FieldRow({ field, editable, onPatch }: RowProps) {
             >
               Corriger
             </button>
-            <button disabled title="Bientôt">Reprendre la photo</button>
+            <button onClick={onRetake}>Reprendre la photo</button>
           </div>
         ))}
     </li>
@@ -65,10 +67,11 @@ function FieldRow({ field, editable, onPatch }: RowProps) {
 interface Props {
   page: PageView;
   onPatch: (fieldId: string, value: Value) => Promise<void>;
-  onConfirm: () => void;
+  onConfirm: (fieldId: string) => void;
+  onRetake: () => void;
 }
 
-export function PageSummary({ page, onPatch, onConfirm }: Props) {
+export function PageSummary({ page, onPatch, onConfirm, onRetake }: Props) {
   const fields = page.fields ?? [];
   const { flagged, known } = groupFields(fields);
   const counts = Object.entries(countByStatus(fields)) as [keyof typeof STATUS_FR, number][];
@@ -82,22 +85,14 @@ export function PageSummary({ page, onPatch, onConfirm }: Props) {
       </strong>
       <p className="counts">{counts.map(([status, n]) => `${n} ${STATUS_FR[status]}`).join(' · ')}</p>
       {pending > 0 && <p className="pending">{pending} champ{pending > 1 ? 's' : ''} à contrôler</p>}
-      <ul>
-        {flagged.map((f) => (
-          <FieldRow key={f.field_id} field={f} editable={editable} onPatch={onPatch} />
-        ))}
-      </ul>
-      {known.length > 0 && (
-        <details>
-          <summary>{known.length} champ{known.length > 1 ? 's' : ''} lu{known.length > 1 ? 's' : ''}</summary>
-          <ul>
-            {known.map((f) => (
-              <FieldRow key={f.field_id} field={f} editable={editable} onPatch={onPatch} />
-            ))}
-          </ul>
-        </details>
-      )}
-      {editable && <button className="primary" onClick={onConfirm}>Confirmer la page</button>}
+      <details>
+        <summary>Voir tous les champs</summary>
+        <ul>
+          {[...flagged, ...known].map((f) => (
+            <FieldRow key={f.field_id} field={f} editable={editable} onPatch={onPatch} onConfirm={onConfirm} onRetake={onRetake} />
+          ))}
+        </ul>
+      </details>
     </div>
   );
 }
