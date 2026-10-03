@@ -122,6 +122,8 @@ def read_page(page):
                 shapes["vlines"].append(b)
             elif 4 <= r.width <= 22 and 4 <= r.height <= 22:
                 shapes["ticks"].append(b)  # ink colour differs per patient: recognised by shape
+            elif 4 <= r.width < 15 and r.height < 4:
+                shapes["ticks"].append(b)  # hatching (some patients fill the box with 3 short near-horizontal strokes)
     return printed, hand, shapes
 
 
@@ -144,7 +146,8 @@ def hand_text(chars):
         else:
             lines.append([ch[1].yc, [ch]])
     text = " ".join("".join(c[0] for c in sorted(l[1], key=lambda c: c[2])) for l in lines)
-    return re.sub(r"\s+", " ", text).strip()
+    # Glyphs the handwriting font cannot draw come out as NUL: nothing is visible, so they are not text.
+    return re.sub(r"\s+", " ", re.sub(r"[\x00-\x1f\x7f]", "", text)).strip()
 
 
 def find_tables(shapes, printed):
