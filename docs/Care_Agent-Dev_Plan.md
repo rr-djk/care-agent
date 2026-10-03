@@ -10,7 +10,7 @@ Decisions taken since this plan was written: Vite + React for the PWA, Hono for 
 
 | Step | Content | Status |
 | --- | --- | --- |
-| 1 | Scaffold, dataset hash guard, latency probe (GO/NO-GO for Gemma 4 E4B on CPU) | Code done on `feature/step-1-scaffold-latency-gate`; **waiting for the model measurements** (needs Ollama + model installed) before merge |
+| 1 | Scaffold, dataset hash guard, latency probe (GO/NO-GO for Gemma 4 E4B on CPU) | Code done on `feature/step-1-scaffold-latency-gate`; measured with Ollama 0.35.1 + `gemma4:e4b`: strict rule NO-GO (~40 s per zone at best), good reading quality with a row × visit schema. **Waiting for the team's decision** on the adjusted approach (see `docs/runtime-notes.md`) |
 | 2 | Shared contracts (`packages/schema`), dedupe, 3-way patient split | Not started |
 | 3 | Ground truth from the PDF, minimal eval, automatic zones | Not started |
 | 4 | Page schemas as data: pages 2, 3, 4 | Not started |
@@ -29,13 +29,13 @@ What exists in the repo today (step 1):
 
 - `apps/pwa`, `apps/server`, `packages/schema`, `tools/eval`: empty workspace stubs.
 - `tools/check-datasets.mjs` (`make check`): verifies every `manifest.json` entry (existence, size, sha256). Result on the real data: 132 of 132 files match; 88 entries share a hash with another entry (the duplicate PNGs).
-- `tools/smoke/` (`make smoke`): crops one zone of specimen page 3 and times an OpenAI-compatible local runtime at several visual token budgets (cold and warm), and checks logprobs and JSON-schema support. **Not yet run against a real model.**
-- `docs/runtime-notes.md`: template to fill with the measurements and the GO/NO-GO decision.
+- `tools/smoke/` (`make smoke`): crops one zone of specimen page 3 and times an OpenAI-compatible local runtime at several visual token budgets (cold and warm), and checks logprobs and JSON-schema support.
+- `docs/runtime-notes.md`: measurements and GO/NO-GO result. Key facts: use Ollama's native API (`think: false`, JSON schema, logprobs all work); reading an image costs ~22 s, writing ~7 tokens/s; Ollama exposes no visual-token budget.
 
 Open items for the team:
 
-- Install the model runtime and pull Gemma 4 E4B-it, then run `MODEL=<tag> RUNTIME_PROC=ollama make smoke` (the exact tag is unverified).
-- The laptop has 15 GB RAM and no discrete GPU: expect slow inference, hence the latency gate and its fallback ladder (fewer/larger crops → budget 560 → cache by crop hash → Gemma 4 E2B).
+- Runtime installed: Ollama 0.35.1, model tag `gemma4:e4b`.
+- The laptop has 15 GB RAM and no discrete GPU: a full 8-page record is estimated at 15–25 minutes of CPU time even with a compact output format. Decide whether this asynchronous speed is acceptable, or whether to measure Gemma 4 E2B.
 - Review notes agreed on: calibrate on patients not used for tuning (3-way split), build ground truth early, derive zones from the PDF vector coordinates, add original-image access control and PII guard tasks, and use page-quad + perspective warp before ORB matching.
 
 ## Overview
