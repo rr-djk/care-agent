@@ -3,8 +3,10 @@
 ## Commands (use Make, not bare npm)
 
 - `make check` — dataset guard + schema typecheck + all tests. Run before opening a PR.
-- `make test` — `npm test -w @care-agent/schema` then `node --test tools/`.
+- `make test` — `npm test -w @care-agent/schema`, `node --test tools/`, then `python3 -m unittest discover -s tools/eval`.
 - `make pages` — `dedupe.mjs` THEN `split.mjs` (order matters; split reads `tools/eval/data/pages.json`).
+- `make truth` — `extract_pdf.py` (ground truth) THEN `zones.py` THEN `zones_preview.py` (regenerates `docs/zones-p0*.png`).
+- `make eval ARGS='--extractor truth|empty|<preds.json> --split tune --pages p3'` — flags go through `ARGS=`; `make eval -- --flag` does not work. Results → `eval-results/` (gitignored).
 - `make smoke` — `crop.py` then `probe.mjs`. Requires a running local runtime + `MODEL=<tag>`.
 - Single checks: `npm run typecheck -w @care-agent/schema`; `npm test -w @care-agent/schema`; `node --test tools/<file>.test.mjs`.
 - Node >= 20, npm workspaces (`apps/*`, `packages/*`, `tools/*`). Deps pinned exact (`.npmrc` `save-exact=true`).
@@ -12,7 +14,10 @@
 ## Layout — source of truth
 
 - `packages/schema/src/` — zod contracts (status, field, page, zone, lifecycle, entities, NDJSON events). `docs/api.md` v0 mirrors them; keep both in sync. Error shape: `{ code, text }`.
-- `apps/pwa`, `apps/server`, `tools/eval` — still stubs (plan steps 3+ not started).
+- `apps/pwa`, `apps/server` — still stubs.
+- `tools/eval/data/ground_truth.json` — per PDF page: slots `{key, kind text|checkbox, value, bbox_frac}`. Keys are stable per layout (pages 7/8 reuse `p05`/`p06` keys). Identifier slots never exist; staff names are `<staff>`. `extract_pdf.py` aborts if an excluded value would be written.
+- `tools/eval/data/zones/<layout>.json` — one zone = one model call; `cells` order = order of `ZoneAnswer.cells`. Built from patient 1's geometry; `masks` = identifier rectangles to blank before any crop leaves the device or is shown.
+- Comparison rule (`run.mjs` + `normalize.mjs`, mirrored in `normalize.py`): case-fold, strip accents, decimal comma → dot, drop whitespace; also equal once accented letters are dropped (some handwriting fonts lack "é": image shows "N ant" for "Néant").
 - `tools/check-datasets.mjs` — read-only guard (existence + bytes + sha256 per `manifest.json` entry).
 - `tools/eval/{dedupe,split}.mjs` — 80 unique pages; 3-way patient split, `SEED=20261003`, tune 4 / calibrate 3 / verify 3.
 - `tools/smoke/{crop.py,probe.mjs}` — CPU latency gate; output to `tools/smoke/out/` (gitignored).
@@ -21,7 +26,9 @@
 
 - Located via `DATASETS_DIR` (default `../datasets`). Never write there — `crop.py` refuses paths inside it.
 - `check-datasets` resolves each manifest entry under `DATASETS_DIR`, then its parent (`consignes-fr-en.pdf` lives one level above datasets — the fallback is intentional).
-- `tools/eval/data/` (`pages.json`, `split.json`) is the one committed exception to the `data/` gitignore. Commit regenerations; nothing else under `data/`, `crops/`, `eval-results/`, `models/`.
+- `tools/eval/data/` (pages, split, ground truth, zones, masks, labeling template) is the one committed exception to the `data/` gitignore. Commit regenerations; nothing else under `data/`, `crops/`, `eval-results/`, `models/`.
+- PDF facts: printed text is always Helvetica; handwriting is any other font (one per patient). Checkboxes are 8×8 pt vector squares, ticks are strokes inside. Pages are skewed up to ~±0.45° (≈15 px at 200 dpi) → crops need padding or rectification.
+- Page 3 zones of visit columns 2–3 contain no row labels: the cropper must prepend the row-label strip.
 - `dedupe.mjs` cross-checks the PDF via `pdftotext` when installed; warns and skips when absent (not a failure).
 
 ## Smoke probe quirks (from `docs/runtime-notes.md`)
@@ -33,9 +40,9 @@
 
 ## Workflow constraints
 
-- One branch per plan step: `feature/step-N-name`, merged to `main` only after validation. Conventional Commits in English.
+- One branch per plan step: `feature/step-N-name`, merged to `main` once verified, then pushed. Conventional Commits in English. Progress table: "Build progress" in `docs/Care_Agent-Dev_Plan.md`.
 - No identifier fields anywhere: woman's name, husband's name, CIN, phone, address. Enforced by schema tests — keep that test green.
-- French-first UI/labels; dev plan lives at `docs/Care_Agent-Dev_Plan.md` (steps 1–2 validated/merged).
+- French-first UI/labels; dev plan lives at `docs/Care_Agent-Dev_Plan.md` (steps 1–3 merged).
 
 ---
 
