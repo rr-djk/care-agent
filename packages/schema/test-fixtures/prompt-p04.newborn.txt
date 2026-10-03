@@ -1,0 +1,10 @@
+Crop of a French maternity record. Answer {"cells":[...]} with exactly 8 values in this order:
+1. Vivant (checkbox)
+2. Mort-né (checkbox)
+3. Décès < 24 heures (checkbox)
+4. Sexe
+5. Poids à la naissance
+6. Périmètre crânien à la naissance
+7. Anomalie à préciser
+8. Âge gestationnel
+Copy handwriting verbatim. "" = empty, null = illegible. Never guess. Checkbox: "x" if ticked, else "". Ignore names, ID numbers, phone numbers, addresses.
