@@ -1,0 +1,4 @@
+Crop of a French maternity record. Answer {"cells":[...]} with exactly 24 values, row-major.
+Table rows: Rendez-vous; Venue le; Visites de relance; Age probable; Poids (kg); TA; Anomalies squelette; État des conjonctives
+Columns: T1 V1; T1 V2; T1 V3
+Copy handwriting verbatim. "" = empty, null = illegible. Never guess. Ignore names, ID numbers, phone numbers, addresses.

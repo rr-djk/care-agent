@@ -6,6 +6,7 @@
 - `make test` — `npm test -w @care-agent/schema`, `node --test tools/`, then `python3 -m unittest discover -s tools/eval`.
 - `make pages` — `dedupe.mjs` THEN `split.mjs` (order matters; split reads `tools/eval/data/pages.json`).
 - `make truth` — `extract_pdf.py` (ground truth) THEN `zones.py` THEN `zones_preview.py` (regenerates `docs/zones-p0*.png`).
+- `make schemas` — bootstrap `packages/schema/pages/*.json` from ground truth + zones. **Overwrites hand edits**: the JSON files are the source of truth now; edit them, don't regenerate.
 - `make eval ARGS='--extractor truth|empty|<preds.json> --split tune --pages p3'` — flags go through `ARGS=`; `make eval -- --flag` does not work. Results → `eval-results/` (gitignored).
 - `make smoke` — `crop.py` then `probe.mjs`. Requires a running local runtime + `MODEL=<tag>`.
 - Single checks: `npm run typecheck -w @care-agent/schema`; `npm test -w @care-agent/schema`; `node --test tools/<file>.test.mjs`.
@@ -13,7 +14,10 @@
 
 ## Layout — source of truth
 
-- `packages/schema/src/` — zod contracts (status, field, page, zone, lifecycle, entities, NDJSON events). `docs/api.md` v0 mirrors them; keep both in sync. Error shape: `{ code, text }`.
+- `packages/schema/src/` — zod contracts (status, field, page, zone, lifecycle, entities, NDJSON events), page schemas (`pageSchema.ts`), zone prompts + answer parser (`prompt.ts`), normalizers + validators (`values.ts`). `docs/api.md` v0 mirrors them; keep both in sync. Error shape: `{ code, text }`.
+- `@care-agent/schema` is browser-safe; `loadPageSchema` lives in `@care-agent/schema/node` (uses `node:fs`). Never import `node:*` from the main entry.
+- `packages/schema/pages/<layout>.json` — fields (FieldDef), zones (ordered cell ids, `rows`/`columns` for tables, `label_strip`), masks. Done: identification, pregnancy, delivery. `applicability` = `"<field id> = <value>"` (no evaluator yet).
+- Prompts must stay short (CPU prefill is the bottleneck): snapshot fixtures in `packages/schema/test-fixtures/`, all zones < 130 words (tested). Answer format `{"cells":[...]}`: `""` empty, `null` illegible, checkbox `"x"`/`""`. Ollama `format` uses `anyOf` string|null (not yet run against Ollama).
 - `apps/pwa`, `apps/server` — still stubs.
 - `tools/eval/data/ground_truth.json` — per PDF page: slots `{key, kind text|checkbox, value, bbox_frac}`. Keys are stable per layout (pages 7/8 reuse `p05`/`p06` keys). Identifier slots never exist; staff names are `<staff>`. `extract_pdf.py` aborts if an excluded value would be written.
 - `tools/eval/data/zones/<layout>.json` — one zone = one model call; `cells` order = order of `ZoneAnswer.cells`. Built from patient 1's geometry; `masks` = identifier rectangles to blank before any crop leaves the device or is shown.
@@ -42,7 +46,7 @@
 
 - One branch per plan step: `feature/step-N-name`, merged to `main` once verified, then pushed. Conventional Commits in English. Progress table: "Build progress" in `docs/Care_Agent-Dev_Plan.md`.
 - No identifier fields anywhere: woman's name, husband's name, CIN, phone, address. Enforced by schema tests — keep that test green.
-- French-first UI/labels; dev plan lives at `docs/Care_Agent-Dev_Plan.md` (steps 1–3 merged).
+- French-first UI/labels; dev plan lives at `docs/Care_Agent-Dev_Plan.md` (steps 1–4 merged).
 
 ---
 
