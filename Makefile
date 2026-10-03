@@ -1,4 +1,4 @@
-.PHONY: check test pages truth schemas eval predict smoke help
+.PHONY: check test pages truth schemas eval predict smoke server help
 
 help: ## List targets
 	@echo "make check  - dataset guard + typecheck + tests"
@@ -8,6 +8,7 @@ help: ## List targets
 	@echo "make schemas - regenerate packages/schema/pages/*.json (OVERWRITES hand edits)"
 	@echo "make eval   - score predictions against the ground truth, e.g. make eval ARGS='--extractor empty --split verify'"
 	@echo "make predict - run the analyzer on specimen pages and write eval-results/predictions-<ts>.json, e.g. make predict ARGS='--split tune --pages p3 --limit 1'"
+	@echo "make server - start the API server on PORT (default 8787), data in DATA_DIR (default ./data)"
 	@echo "make smoke  - latency probe against a local runtime (needs MODEL, see tools/smoke/README.md)"
 
 check:
@@ -40,6 +41,9 @@ eval:
 
 predict:
 	npm run predict -w @care-agent/server -- $(ARGS)
+
+server:
+	npm run dev -w @care-agent/server
 
 smoke:
 	python3 tools/smoke/crop.py
