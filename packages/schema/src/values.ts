@@ -28,8 +28,10 @@ export function normalizeValue(field: FieldDef, verbatim: string | null): Normal
     }
     case 'number': {
       const m = /^(\d+(?:[.,]\d+)?)\s*(\D*)$/.exec(v);
-      const unit = m?.[2].trim().toLowerCase();
-      if (!m || (unit && unit !== field.unit?.toLowerCase())) return v;
+      // handwriting often lacks the degree sign: "37.1 C" is "37.1 °C"
+      const bare = (u?: string) => u?.trim().toLowerCase().replace('°', '');
+      const unit = bare(m?.[2]);
+      if (!m || (unit && unit !== bare(field.unit))) return v;
       return Number(m[1].replace(',', '.'));
     }
     case 'enum': {

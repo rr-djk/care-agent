@@ -27,5 +27,7 @@ export const PageSchema = z.object({
 });
 export type PageSchema = z.infer<typeof PageSchema>;
 
-export const PAGE_LAYOUTS = ['cover', 'identification', 'pregnancy', 'delivery'] as const;
-export type PageLayout = (typeof PAGE_LAYOUTS)[number];
+export const PAGE_LAYOUTS = ['cover', 'identification', 'pregnancy', 'delivery', 'postpartum_mother', 'postpartum_newborn'] as const;
+// Layouts of the real registry (photos of the Moroccan form): no ground truth, only the CLI uses them (step 12).
+export const REAL_LAYOUTS = ['real_cover'] as const;
+export type PageLayout = (typeof PAGE_LAYOUTS)[number] | (typeof REAL_LAYOUTS)[number];
