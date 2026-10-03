@@ -102,6 +102,14 @@ How to read it:
 
 Success: the 8 visit-1 values `03/07/2025`, `05/06/2025`, `Non`, `8 SA`, `51,6`, `104/78`, `RAS`, `Normales` are `KNOWN` on the `v1_t1` rows, and the 16 other cells are `""` / `NOT_PROVIDED`. Run it again: the zone line ends with `[cache hit]` and `wall 0.0 s` (answers are cached in `data/cache/`, git-ignored). The key safety rule: a wrong value must never be `KNOWN` silently; e.g. on zone `p03.visits.r1c2` the model may read `8 17 SA` for `17 SA`, which must come out `NEEDS_REVIEW`.
 
+Check a reading yourself (what the model saw, what it was asked, what it answered):
+
+```
+npm run analyze -w @care-agent/server -- 19 --zones p03.visits.r1c1 --save-crops p19
+```
+
+It first prints the folder, `crops, prompts and answers -> .../care-agent/data/crops/p19` (relative names always land in the git-ignored `data/crops/`). For each zone sent to the model it writes `<zone>.png` (the exact image: identifiers blacked out, row labels added on the left), `<zone>.prompt.txt` (the cells asked, numbered) and `<zone>.answer.json` (the raw answer, one value per numbered cell, in order). Open the PNG next to the answer: value n of the answer must be what is written in cell n of the prompt. The true value of any field is in `tools/eval/data/ground_truth.json` (page number, then field id).
+
 Other useful runs:
 
 ```
@@ -157,16 +165,87 @@ What to check in the browser: the analysis takes several minutes on CPU, the « 
 - UI only, no server: `VITE_FIXTURES=1 make pwa` replays a canned flow (a doubt, an illegible field, a failed page with manual entry, a retake).
 - Optional LLM chat: `CHAT_ENGINE=strands make server` (see `docs/security.md`).
 
-### 6. On a phone (same Wi-Fi as the laptop)
+### 6. On a phone (same Wi-Fi as the laptop) — phone test over HTTPS
 
-The camera needs HTTPS. Once per machine:
+Goal: open the app on a real phone, take a photo of a registry page with its camera, and see the analysis and the review. The phone's browser only allows the camera on HTTPS, so the laptop serves the PWA with a certificate from **mkcert**, a tool that creates a small local certificate authority (CA); the phone is told to trust that CA once. Plan ~20 minutes the first time. Steps 1–4 are done once per laptop/phone; steps 5–7 each time.
+
+**What you need:** the laptop (Linux; macOS/Windows notes inline) with the repo installed (sections 1–2) and Ollama + `gemma4:e4b` running; an Android phone or iPhone on the **same Wi-Fi** as the laptop; a printed specimen page, or a page shown full screen on another screen (e.g. `../datasets/data/Paper Registry/dossiers_specimen_10_patientes-19.png`, page type 3).
+
+**1. Install mkcert on the laptop**
 
 ```
-mkcert -install            # installs a local root CA (install mkcert first: https://github.com/FiloSottile/mkcert)
-make certs                 # certificate for localhost + this machine's LAN IPs, in data/certs/
+sudo apt install libnss3-tools mkcert        # Debian/Ubuntu. Package missing? Download the binary from
+                                             # https://github.com/FiloSottile/mkcert/releases, chmod +x it, put it in your PATH
+# macOS: brew install mkcert nss     Windows: choco install mkcert
+mkcert -version                              # expect a version line, e.g. v1.4.4
 ```
 
-Then trust the root CA on the phone (`mkcert -CAROOT` shows where `rootCA.pem` is; Android: install it as a CA certificate; iOS: install the profile, then enable full trust in Settings > General > About > Certificate Trust Settings). Restart `make pwa`, open `https://<laptop LAN IP>:5173` on the phone. If the phone cannot reach the laptop: guest Wi-Fi often isolates clients (use a phone hotspot instead) and the laptop firewall must allow ports 5173.
+**2. Create the local CA and the certificate** (in `care-agent/`)
+
+```
+mkcert -install
+make certs
+```
+
+`mkcert -install` prints `Created a new local CA` and `The local CA is now installed in the system trust store`. `make certs` prints `Created a new certificate valid for the following names` followed by `localhost`, `127.0.0.1` and the laptop's IP addresses (e.g. `192.168.1.42`), then the two files `data/certs/cert.pem` and `data/certs/key.pem` (git-ignored: `git check-ignore data/certs/cert.pem` prints the path). Check the laptop's Wi-Fi address with `hostname -I` (the first `192.168.x.x` or `10.x.x.x`): it must be in that list. **If the laptop gets a new IP later (other network, hotspot), run `make certs` again and restart `make pwa`.**
+
+**3. Put the CA on the phone**
+
+The file to transfer is `rootCA.pem`, in the folder printed by `mkcert -CAROOT`. It is the CA certificate only; never copy `rootCA-key.pem` (the private key). Easiest transfer: serve that folder over the Wi-Fi for a minute.
+
+```
+python3 -m http.server 8000 --directory "$(mkcert -CAROOT)"
+```
+
+On the phone, open `http://<laptop IP>:8000/rootCA.pem` and download it, then stop the command with Ctrl+C. (USB or emailing it to yourself works too.)
+
+- **Android:** Settings › Security (or Security & privacy) › More security settings › Encryption & credentials › Install a certificate › **CA certificate** › confirm the warning › pick `rootCA.pem`. Menu names vary by brand: search "certificate" in Settings. Use **Chrome** for the test.
+- **iPhone:** open the downloaded file → "Profile downloaded" → Settings › Profile Downloaded › Install. Then **Settings › General › About › Certificate Trust Settings** › enable full trust for "mkcert …". Without this second switch Safari still refuses the site. Use **Safari**.
+
+**4. Let the phone reach the laptop**
+
+If the laptop firewall is active (`sudo ufw status` says `active`), open the PWA port: `sudo ufw allow 5173/tcp`. Only port 5173 is needed: the PWA proxies `/api` to the server on the laptop itself.
+
+**5. Start the app** (two terminals in `care-agent/`)
+
+```
+make server
+make pwa
+```
+
+`make pwa` must now show **https**, which proves the certificate was found:
+
+```
+  ➜  Local:   https://localhost:5173/
+  ➜  Network: https://192.168.1.42:5173/
+```
+
+If it shows `http://`, the files in `data/certs/` are missing: redo step 2.
+
+**6. Open the app on the phone**
+
+Type the `Network:` address exactly, `https://<laptop IP>:5173`. Expected: the « Care Agent » login screen, with no security warning. Log in (`sf-01` + the PIN printed by `make server`).
+
+**7. Test checklist (note what works and what does not)**
+
+1. **Nouvelle session**, choose page type **3 · Grossesse**, tap **Photographier une page**: the **camera** opens (not only a file picker). Photograph the page flat, whole, without glare.
+2. Bubbles « Photo enregistrée » then « Page reçue, analyse en cours… »; on the laptop, the `make server` terminal shows `POST /api/pages 200`.
+3. After a few minutes: the page summary, then the review questions one by one. Answer one with **Confirmer**, one with **Corriger** (type a value), one by typing in the text box (e.g. `neg`). At the end: « Tout est vérifié pour la page 3. » and **Confirmer la page**.
+4. Offline: switch the phone to airplane mode, take another photo: it is listed « En attente de traitement IA ». Turn airplane mode off (Wi-Fi back on): the badge goes « Synchronisation » then « En ligne », and the page is sent and analysed once.
+5. Optional: browser menu › "Add to Home screen" / "Install app": the app opens full screen like a native app.
+
+**What to report back:** phone model, OS version and browser; which checklist items passed; a screenshot of anything wrong; the photo used if the reading was bad. A real camera photo is harder than the clean specimen files: compare the values the app shows with the paper page.
+
+**Troubleshooting**
+
+| Symptom | Cause and fix |
+| --- | --- |
+| "Your connection is not private" / « Ce site n'est pas sécurisé » | The phone does not trust the CA (redo step 3; on iPhone, the Certificate Trust Settings switch), or the address is not in the certificate (laptop IP changed: `make certs` again, restart `make pwa`). |
+| The page never loads / times out | Not on the same Wi-Fi; guest or public Wi-Fi often isolates devices (use a phone hotspot for both devices, then `make certs` again for the new IP); firewall (step 4). |
+| `make pwa` shows `http://` | `data/certs/cert.pem` or `key.pem` missing: step 2. |
+| Only a file picker, no camera | Opened over `http://`, or camera access denied: allow it in the browser's site settings. |
+| Login fails | Server not running, or wrong PIN (PINs are printed once at the first `make server`; section 5 explains how to set them). |
+| Analysis never ends | Ollama not running or the model not pulled (`curl localhost:11434/api/version`). On CPU several minutes per page is normal. |
 
 ### 7. Offline demo (encrypted queue, sync)
 

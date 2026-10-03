@@ -7,4 +7,4 @@ Crop of a French maternity record. Answer {"cells":[...]} with exactly 8 values 
 6. TA [T1 V1]
 7. Anomalies squelette [T1 V1]
 8. État des conjonctives [T1 V1]
-Copy handwriting verbatim. "" = empty, null = illegible. Never guess. Ignore names, ID numbers, phone numbers, addresses.
+Copy handwriting verbatim. "" = empty, null only if there is writing you cannot read at all. Never invent a value. Ignore names, ID numbers, phone numbers, addresses.
