@@ -28,3 +28,21 @@ Never masked: clinical values (`120/80`, `12 SA`, `3587 g`, `152 cm`), dates, pl
 Applied server-side to: every `short_text` / `free_text` value coming from the model, before it is stored (`vision/analyze.ts`); every `PATCH` value (the response says an identifier was masked); every chat message, before it is parsed or sent to a model.
 
 Known limit: the model answer cache (`data/cache/`, local and git-ignored) keeps the raw model response, before the guard.
+
+## Identifiers and patient linking (step 11)
+
+**What is stored about a woman.** A patient is `patients(id, fiche_number, facility, created_at)`: a generated id, the « N° de la fiche » and the facility. Neither is a direct identifier (a fiche number is a registry sequence like `2026-711-003`; the facility is a place of care). No column anywhere holds a woman's name, her husband's name or job, a CIN, a phone number or an address. A test lists the columns of every table (words `name`, `nom`, `husband`, `cin`, `phone`, `tel`, `address`…) and scans the stored text with the PII guard; the schema test already forbids such a field in the page schemas.
+
+**The cover page.** `packages/schema/pages/cover.json` has the fiche number (category `admin_number`), region, province, facility name, the facility type checkboxes (DR, CSC, CSU, CSCA, CSUA), coverage (fixe, mobile) and the risk checkboxes. The woman's name line (« Nom/Prénom de la parturiente ») has **no field and no cell**; its rectangle is in `masks` and is painted black before any crop is cut, so the name is never sent to the model, never shown in `docs/zones-p01.png` and never written. It stays in the original photo, which is stored encrypted (see above).
+
+**Internal ids.** `PAT-000001`, `PAT-000002`… come from a server counter (`counters` table), allocated in the same transaction as the `patients` row and only after the midwife's decision. They are never computed from the fiche number, the facility, a date or any other value, so an id reveals nothing and cannot be rebuilt from the data.
+
+**Linking never decides.** The engine (`apps/server/src/linking.ts`) proposes candidates and a question; the midwife answers. There is no automatic creation and no automatic merge: even a single exact match asks one question; several, near or contradicting candidates give the four buttons [Patient 1] [Patient 2] [Aucune, créer] [Je ne sais pas]; « Je ne sais pas » parks the pages in `DUPLICATE_SUSPECTED` and creates nothing. A doubtful fiche reading (letters O/I read for 0/1, a shape other than `2026-823-001`) is confirmed with the midwife first (« J'ai lu 2O26-823-OO1, est-ce correct ? »). Candidate cards show only non-identifying facts: fiche, facility, age, DDR, number of visits, date of the last visit, and the French reasons (« Âge différent : … »).
+
+**Who sees what.** A midwife reads `GET /api/patients/:id` only for a patient she has linked a session to (`403` otherwise); the supervisor reads all and modifies nothing, including the duplicates list. The candidate cards of other midwives' patients are visible while linking (needed to catch a duplicate across midwives) but contain no identifier, and the record behind them stays closed until she links.
+
+**Typed values.** The fiche number and facility a midwife types go through the PII guard; a value that looks like an identifier is refused (`400`), not stored masked.
+
+**Re-digitization.** A later photo of a page type already in the record never overwrites silently: where the retained value would change, the midwife chooses per field (« Garder l'ancien » / « Prendre le nouveau »); both photos and both sets of fields stay stored and the record shows which page each retained value comes from.
+
+Known limits: the specimen cover shows a printed « Patiente fictive n°3/10 » mark; it is not read (no cell). The candidate search compares all patients in memory, which is fine for a demo registry only.

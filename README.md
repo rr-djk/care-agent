@@ -18,7 +18,7 @@ Plan and build progress: [docs/Care_Agent-Dev_Plan.md](docs/Care_Agent-Dev_Plan.
 
 ## How to test
 
-What works today: reading registry pages with the local model (command line, section 3), and the app itself: server + PWA in the browser (section 5) or on a phone (section 6). The chat then walks the doubtful fields one by one (Confirmer / Corriger / Reprendre la photo / Laisser illisible, or type the value), and offers manual entry when the model is unavailable. Offline capture with an encrypted queue works too (section 7), and every photo goes through an on-device quality check (section 8). Not yet: patient linking.
+What works today: reading registry pages with the local model (command line, section 3), and the app itself: server + PWA in the browser (section 5) or on a phone (section 6). The chat then walks the doubtful fields one by one (Confirmer / Corriger / Reprendre la photo / Laisser illisible, or type the value), and offers manual entry when the model is unavailable. Offline capture with an encrypted queue works too (section 7), and every photo goes through an on-device quality check (section 8). Patient linking works too (section 9): the cover page gives the fiche number, the bot asks which patient record the session belongs to, and a longitudinal record shows the visits. Not yet: pages 5 to 8.
 
 ### 1. Prerequisites
 
@@ -49,10 +49,10 @@ make check
 ```
 entries: 132, ok: 132, mismatches/missing: 0          <- every data file matches manifest.json
 info: 88 entries share an identical sha256 with another entry   <- normal: duplicate PNGs in the dataset
-# pass 34 / # fail 0                                  <- schema tests
+# pass 38 / # fail 0                                  <- schema tests
 # pass 7 / # fail 0                                   <- quality tests (OpenCV.js, ~10 s)
-# pass 53 / # fail 0                                  <- server tests
-      Tests  45 passed (45)                           <- PWA tests
+# pass 75 / # fail 0                                  <- server tests (incl. linking)
+      Tests  52 passed (52)                           <- PWA tests
 # pass 14 / # fail 0                                  <- eval tools tests
 Ran 9 tests ... OK                                    <- Python tests
 ```
@@ -67,10 +67,11 @@ Feeds the ground truth to the harness as if it were the model, to prove the harn
 
 ```
 layout             non-empty         empty           all
+cover               68 100.0%    142 100.0%    210 100.0%
 identification    354 100.0%    416 100.0%    770 100.0%
 pregnancy        1181 100.0%   1619 100.0%   2800 100.0%
 delivery          116 100.0%    224 100.0%    340 100.0%
-overall          1651 100.0%   2259 100.0%   3910 100.0%
+overall          1719 100.0%   2401 100.0%   4120 100.0%
 ```
 
 Every cell must be `100.0%`. `non-empty` = cells with handwriting, `empty` = cells left blank on paper. The JSON report goes to `eval-results/` (git-ignored).
@@ -118,7 +119,26 @@ npm run analyze -w @care-agent/server -- 20          # delivery page: checkboxes
 npm run ink-eval -w @care-agent/server               # ink detector vs ground truth on 80 pages, no model, ~1 min
 ```
 
-`ink-eval` prints precision/recall per layout and threshold; at the thresholds used (text 0.002, delivery text 0.01, checkbox 0.05) expect `precision=1.000` and `recall` ≥ `0.997`.
+`ink-eval` prints precision/recall per layout and threshold; at the thresholds used (text 0.002, delivery and cover text 0.01, checkbox 0.05) expect `precision=1.000` and `recall` ≥ `0.997`.
+
+**The cover page (page type 1)** is read the same way. Page 17 is patient 3's cover (tune split); the zone preview with the woman's name painted black is `docs/zones-p01.png`:
+
+```
+npm run analyze -w @care-agent/server -- 17
+```
+
+Output (excerpt, ~40 s: only the `p01.identity` zone has handwriting, the two other zones are checkboxes read from the ink):
+
+```
+p01.identity       p01.n_deg_de_la_fiche                        "2026-711-003"         KNOWN          0.0531
+p01.identity       p01.region                                   "Marrakech-Safi"       KNOWN          0.0715
+p01.identity       p01.province                                 "Al Haouz"             KNOWN          0.0505
+p01.identity       p01.nom_de_l_etablissement_sanitaire         "DR Tahannaout Sud"    KNOWN          0.0595
+  -> p01.identity: prefill 30.2 s (306 tok), gen 7.9 s (44 tok), wall 38.3 s
+p01.facility       p01.dr   ... ink 0.5619   (ticked)      p01.mobile ... ink 0.4694   (ticked); the other boxes 0.0000
+```
+
+Success: the four values equal the truth (`tools/eval/data/ground_truth.json`, page `17`: `2026-711-003`, `Marrakech-Safi`, `Al Haouz`, `DR Tahannaout Sud`), `DR` and `Mobile` have ink above 0.05 (ticked) and every other box 0.0000. The woman's name is never read: the cover schema has no field for it and its rectangle is blacked out before any crop is cut (check with `--save-crops cover17`: `data/crops/cover17/p01.identity.png` shows the four fields and no name).
 
 ### 4. Measure accuracy on a split (long: plan tens of minutes)
 
@@ -156,7 +176,7 @@ care-agent server on :8787 (data: .../care-agent/data, analyzer on)
 ```
 
 Write them down; later starts print only the last line. Lost them? Stop the server, delete `data/care-agent.db` (this also deletes uploaded pages) or use `data/users.json`. `make pwa` prints `Local: http://localhost:5173/` and a `Network:` line with the LAN address for the phone. To choose the PINs instead, create `data/users.json` before the first start: `[{ "id": "sf-01", "role": "midwife", "pin": "123456" }]`.
-Open http://localhost:5173, log in as `sf-01`, tap **Nouvelle session**, pick the page type (2, 3 or 4 are analyzed), tap **Photographier une page** and choose a specimen PNG (e.g. `../datasets/data/Paper Registry/dossiers_specimen_10_patientes-19.png`, page type 3). Expected: "Photo envoyée", "Page reçue, analyse en cours…", then after a few minutes a page summary and the first question (« J'ai lu « … » pour …, mais la valeur semble inhabituelle. Pouvez-vous vérifier ? ») with **Confirmer / Corriger / Reprendre la photo / Laisser illisible**; answer with the buttons or type the value (e.g. `158`, `12/04/2026`, `120/80`, `neg`, `c'est bon`), then the bot asks the next field, and « Tout est vérifié pour la page 3. » + **Confirmer la page** at the end. **Reprendre la photo** uploads a new photo that replaces the page.
+Open http://localhost:5173, log in as `sf-01`, tap **Nouvelle session**, pick the page type (1 cover, 2, 3 or 4 are analyzed), tap **Photographier une page** and choose a specimen PNG (e.g. `../datasets/data/Paper Registry/dossiers_specimen_10_patientes-19.png`, page type 3). Expected: "Photo envoyée", "Page reçue, analyse en cours…", then after a few minutes a page summary and the first question (« J'ai lu « … » pour …, mais la valeur semble inhabituelle. Pouvez-vous vérifier ? ») with **Confirmer / Corriger / Reprendre la photo / Laisser illisible**; answer with the buttons or type the value (e.g. `158`, `12/04/2026`, `120/80`, `neg`, `c'est bon`), then the bot asks the next field, and « Tout est vérifié pour la page 3. » + **Confirmer la page** at the end. **Reprendre la photo** uploads a new photo that replaces the page.
 
 What to check in the browser: the analysis takes several minutes on CPU, the « Page reçue, analyse en cours… » bubble stays until then (the server terminal shows `POST /api/pages 200` then nothing while the model works). The page summary counts `lu / à vérifier / illisible / non lu`; every « à vérifier » field comes back as a question with the reason, and **Confirmer la page** is refused (list of fields) while a field is still to check. Never expected: a percentage shown to the midwife, or a doubtful value accepted without a question.
 
@@ -293,8 +313,8 @@ Look at the files in `eval-results/quality/` (git-ignored, verify: `git check-ig
 
 ```
 npm test -w @care-agent/quality     # metrics, quad detection, warp size, gate outcomes, stability: expect "# pass 7", "# fail 0"
-npm test -w @care-agent/server      # incl. LOW_QUALITY -> NEEDS_REVIEW and the rectify counter: expect "# pass 53"
-npm test -w @care-agent/pwa         # incl. guide geometry and quality kept in the encrypted queue: expect "45 passed"
+npm test -w @care-agent/server      # incl. LOW_QUALITY -> NEEDS_REVIEW and the rectify counter: expect "# pass 75"
+npm test -w @care-agent/pwa         # incl. guide geometry and quality kept in the encrypted queue: expect "52 passed"
 ```
 
 Then the app (`npm run build -w @care-agent/pwa`, `npx vite preview` in `apps/pwa`, and `ANALYZER=ink make server` so no model is called; `localhost` counts as a secure context for the camera):
@@ -306,10 +326,46 @@ Then the app (`npm run build -w @care-agent/pwa`, `npx vite preview` in `apps/pw
 
 Success: the green frame appears only on a sharp, well framed page and never on a blurry one; the blurry photo gets « Photo floue : rapprochez-vous et tenez le téléphone immobile »; the server log (`make server`) shows one `warp: n of m analysed pages rectified since start` line per page read (model or `ANALYZER=ink`). Failure: the camera screen black or stuck on « Démarrage de la caméra… » (permission, or no HTTPS off localhost: use the file picker), the check never answering (OpenCV asset not cached: build + preview, not the dev server, for offline), a clean photo refused.
 
+### 9. Patient linking (cover page, link question, longitudinal record)
+
+Needs no model. Details: [docs/api.md](docs/api.md) (endpoints), [docs/security.md](docs/security.md) (identifiers).
+
+**9.1 Unit and API tests**
+
+```
+npm test -w @care-agent/server    # expect "# pass 75" and "# fail 0"
+npm test -w @care-agent/pwa       # expect "52 passed"
+```
+
+What they prove (test names in `apps/server/src/linking.test.ts`, `record.test.ts`, the `linking:` / `re-digitization:` / `privacy:` / `SYNCED:` tests in `server.test.ts`, `patient linking` in `apps/pwa/src/state.test.ts`): exact, near, inconsistent and low-confidence fiche cases; nothing is ever created or linked by asking; `PAT-000001`, `PAT-000002` come from a counter; « Je ne sais pas » parks the pages in `DUPLICATE_SUSPECTED` and the same endpoint settles it later; per-field re-digitization choices; a midwife gets `403` on a patient she has no linked session with; a database dump after a full flow holds no identifier (no identifier column, no CIN or phone pattern in any text value, a phone typed into a free-text field is stored as `[masqué]`). Failure would be a red test named after one of these rules.
+
+**9.2 In the browser (no model: `ANALYZER=ink`)**
+
+```
+ANALYZER=ink make server            # first start prints sf-01 / sf-02 / sup-01 PINs (or put data/users.json first)
+npm run build -w @care-agent/pwa && cd apps/pwa && npx vite preview    # http://localhost:4173, or `make pwa` on :5173
+```
+
+Use a specimen cover and a pregnancy page of the same patient (the files in `../datasets/data/Paper Registry/` are named `dossiers_specimen_10_patientes-17__<hash>.png` for page 17 = patient 3's cover, `...-19__<hash>.png` = patient 3's pregnancy page; `ls` shows the exact names).
+
+1. **Session 1.** Log in as `sf-01`, **Nouvelle session** > **Démarrer** (leave the fiche empty: it will be read from the cover). Page type `1`, **Importer une image** (or **Photographier une page**) with the cover; page type `3` with the pregnancy page. With `ANALYZER=ink` every handwritten cell is a question: for the cover type the four values with **Corriger** (`2026-711-003`, `Marrakech-Safi`, `Al Haouz`, `DR Tahannaout Sud`); confirm each page with **Confirmer la page** (« Tout est vérifié pour la page 1. »). For the long pregnancy page, answer by API or use **Laisser illisible** on each question (the e2e script in section 9.3 fills it from the ground truth).
+   Expected: after the last confirmation « Toutes les pages sont confirmées. … » with the button **C'était la dernière page : choisir le dossier**. Tap it: « Aucun dossier ne correspond à la fiche 2026-711-003 (DR Tahannaout Sud). Créer un nouveau dossier ? » with **Créer un nouveau dossier** / **Je ne sais pas**. Nothing exists yet: `sqlite3 data/care-agent.db 'select count(*) from patients'` prints `0`. Tap **Créer un nouveau dossier**: « Dossier PAT-000001 créé (1 visite) » and **Voir le dossier PAT-000001** (the record: visits, key values, retained values with their source date). The page chips read « dossier enregistré » (pages `SYNCED`).
+2. **Session 2 (same woman).** **Nouvelle session**, the same cover again (type the same fiche, spaces instead of dashes also work: `2026 711 003`) and the pregnancy page again. At the question: a candidate card « Patient 1 · PAT-000001 », fiche, facility, DDR, `1 visite`, the reasons (« Même numéro de fiche et même établissement. », « DDR concordante … », « Province concordante … ») and three buttons: **Oui, c'est le dossier PAT-000001** / **Non, créer un nouveau dossier** / **Je ne sais pas**. Tap the first: « Dossier PAT-000001 mis à jour (2 visites) », then the card « Cette page existe déjà dans le dossier. Pour chaque champ qui diffère, que faut-il garder ? »: for each field whose old value would be overwritten, « Ancien (date) : … · Nouveau : … » and **Garder l'ancien** / **Prendre le nouveau** (the selected one is highlighted; « choix par défaut » until you choose: the new value if it is read reliably, the old one if the new one is empty). **Voir le dossier PAT-000001** now shows 2 visits; each retained value carries the date of the page it comes from. Both photos stay stored (`select page_type, state from pages`).
+3. **Session 3 (near-match).** A new session with the cover where you type the fiche `2026-711-008` (one digit off). Expected: « Je ne suis pas sûr de la patiente pour la fiche 2026-711-008. … », the candidate card with « Numéro de fiche presque identique (2026-711-003 dans le dossier), même établissement. » and the four-button choice **Patient 1** / **Aucune, créer** / **Je ne sais pas** (with two candidates: **Patient 1** / **Patient 2** / **Aucune, créer** / **Je ne sais pas**). Tap **Je ne sais pas**: « D'accord : ces pages sont mises de côté pour vérification (doublon possible). Rien n'est créé ni lié. », the chip reads « à vérifier (doublon ?) », the pages are `DUPLICATE_SUSPECTED`, `patients` still has 1 row. The supervisor lists it with `GET /api/review/duplicates`; the midwife settles it later with `POST /api/sessions/<id>/link`.
+4. **Offline.** Tick **Mode hors ligne (simulation)** once the pages are confirmed: the button **C'était la dernière page : choisir le dossier** is disabled and « Hors ligne : la question attend la connexion au serveur. » appears; untick it and the question is asked. Linking never happens without the server.
+5. **A doubtful fiche.** If the cover reading looks wrong (letters O or I in place of 0 or 1, or not 4-3-3 digits), the bot asks first « J'ai lu 2O26-711-OO3, est-ce correct ? » (**Oui, c'est correct** / **Non, je la saisis**) and only then looks for candidates. A session without a readable fiche asks the midwife to type the fiche and the facility.
+
+What to look at: the server terminal shows only paths and statuses (no values); `data/care-agent.db` (git-ignored) holds `patients(id, fiche_number, facility, created_at)`, `session_links(session_id, patient_id, decision, decided_by, decided_at)`; no column or value holds a name, CIN, phone or address. Success: ids are `PAT-000001`, `PAT-000002`… in creation order whatever the data, no patient appears before a tap, every doubtful case shows the buttons. Failure: a patient row before any decision, a candidate silently attached, or a page left `VALIDATED` after the decision.
+
+**9.3 Scripted end to end (what step 11 was verified with)**
+
+The three sessions above, driven by Playwright against `ANALYZER=ink` server + `vite preview`: `step11.cjs` in the session scratchpad (not part of the repo; it needs `playwright-core` and Chrome). It prints `RESULT PASS ...` lines and writes `step11-*.png` screenshots (cover typed, question « créer », record, candidate card, differences, four buttons, parked, offline wait). Any `RESULT FAIL` line is a failure (exit code 1).
+
 ### Known limits
 
 - CPU only: ~20 s to read a crop plus ~7 output tokens/s; a full 8-page record takes many minutes. Analysis is designed to run in the background.
 - Ollama returns no per-token probabilities for this model, so confidence comes from ink/model agreement and validators.
-- Only pages 2, 3 and 4 have schemas so far (identification, pregnancy, delivery).
+- Only pages 1 to 4 have schemas so far (cover, identification, pregnancy, delivery).
+- Linking: the supervisor reads the duplicates list but the midwife settles them (the supervisor is read-only); the PWA has no screen for a parked session yet (API only); the candidate search scans all patients (fine for a demo, not for thousands); a page added to a session after its link decision cannot be linked (start a new session).
 - Offline, only captures are queued; reviewing (corrections, confirmations) needs the server.
 - Quality thresholds are provisional (recalibrated in step 13); an open booklet is detected as one big quad (the spread), the single-page crop is not done yet.
