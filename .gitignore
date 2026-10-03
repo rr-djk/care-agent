@@ -1,0 +1,15 @@
+node_modules
+dist
+.env
+.env.*
+*.gguf
+*.safetensors
+models/
+data/
+eval-results/
+crops/
+tools/smoke/out/
+.venv/
+__pycache__/
+*.log
+.DS_Store
