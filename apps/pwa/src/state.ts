@@ -1,4 +1,4 @@
-import type { ExtractedField, PageProgress, ReviewItem, ReviewQueue, Session, Status, StreamEvent } from '@care-agent/schema';
+import type { Difference, ExtractedField, LinkDecision, LinkProposal, LinkResult, PageProgress, PatientRecord, ReviewItem, ReviewQueue, Session, Status, StreamEvent } from '@care-agent/schema';
 
 export const PAGE_TYPES = [
   { type: 1, label: 'Couverture' },
@@ -43,6 +43,11 @@ const ERRORS: Record<string, string> = {
   chat_failed: "Je n'ai pas pu traiter ce message.",
   page_not_failed: "Cette page n'est pas en échec.",
   manual_unavailable: "La saisie manuelle n'est pas disponible.",
+  already_linked: 'Cette session est déjà liée à un dossier.',
+  session_not_ready: 'Toutes les pages de la session doivent être confirmées avant de choisir le dossier.',
+  link_key_missing: "Le numéro de la fiche et l'établissement sont nécessaires pour créer un dossier.",
+  patient_not_found: 'Dossier introuvable.',
+  not_registered: "Le dossier n'est pas encore enregistré.",
   bad_request: "Cette demande n'a pas pu être traitée.",
   http_error: 'Le serveur a répondu par une erreur.',
   invalid_meta: 'Les informations de la page sont invalides.',
@@ -62,7 +67,11 @@ export type Msg =
   | { id: number; from: 'bot'; kind: 'summary'; pageId: string }
   | { id: number; from: 'bot'; kind: 'item'; item: ReviewItem } // one review question; buttons only while it is the current one
   | { id: number; from: 'bot'; kind: 'page_clear'; pageId: string } // "Tout est vérifié pour la page N" + Confirmer la page
-  | { id: number; from: 'bot'; kind: 'manual_offer'; pageId: string }; // the AI failed: « Saisie manuelle »
+  | { id: number; from: 'bot'; kind: 'manual_offer'; pageId: string } // the AI failed: « Saisie manuelle »
+  | { id: number; from: 'bot'; kind: 'finish_offer' } // every page is confirmed: « Dernière page : choisir le dossier »
+  | { id: number; from: 'bot'; kind: 'link'; proposal: LinkProposal } // the link question; buttons only while it is the current one
+  | { id: number; from: 'bot'; kind: 'link_done'; result: LinkResult } // « Dossier PAT-000012 mis à jour (3 visites) » + Voir le dossier
+  | { id: number; from: 'bot'; kind: 'differences' }; // re-digitization: one choice per field (the live list is in `State.differences`)
 
 export interface PageView {
   id: string;
@@ -91,9 +100,22 @@ export interface State {
   review: ReviewQueue | null; // last queue loaded from the server
   shown: string | null; // key of the last review item put in the chat
   seen: Record<string, true>; // identities of the analysis events already applied (a reconnect replays the stored ones)
+  // patient linking: offered once every page is confirmed, then asked (proposal), then decided (result)
+  link: { offered: boolean; proposal: LinkProposal | null; result: LinkResult | null };
+  differences: Difference[]; // re-digitization choices of the decided link
 }
 
-export const initialState: State = { session: null, messages: [], pages: {}, order: [], review: null, shown: null, seen: {} };
+export const initialState: State = {
+  session: null,
+  messages: [],
+  pages: {},
+  order: [],
+  review: null,
+  shown: null,
+  seen: {},
+  link: { offered: false, proposal: null, result: null },
+  differences: [],
+};
 
 export type Action =
   | { type: 'session_started'; session: Session }
@@ -104,6 +126,9 @@ export type Action =
   | { type: 'event'; event: StreamEvent }
   | { type: 'field_updated'; pageId: string; field: ExtractedField }
   | { type: 'page_confirmed'; pageId: string }
+  | { type: 'link_proposal'; proposal: LinkProposal }
+  | { type: 'link_decided'; result: LinkResult }
+  | { type: 'differences_updated'; differences: Difference[] }
   | { type: 'reset' };
 
 type NewMsg = Msg extends infer M ? (M extends Msg ? Omit<M, 'id'> : never) : never;
@@ -209,13 +234,74 @@ function onReview(s: State, queue: ReviewQueue): State {
     if (pending === 0) next = push(next, { from: 'bot', kind: 'page_clear', pageId: p.page_id });
   }
   const head = queue.items[0];
-  if (head && itemKey(head) !== next.shown) return { ...push(next, { from: 'bot', kind: 'item', item: head }), shown: itemKey(head) };
-  return head ? next : { ...next, shown: null };
+  if (head && itemKey(head) !== next.shown) next = { ...push(next, { from: 'bot', kind: 'item', item: head }), shown: itemKey(head) };
+  else if (!head) next = { ...next, shown: null };
+  return offerLink(next);
+}
+
+/** Every page of the session is confirmed: offer to choose the patient record (once; again if a page is added meanwhile). */
+export function readyToLink(s: State): boolean {
+  const pages = s.review?.progress.pages ?? [];
+  const mine = s.order.filter((id) => !s.pages[id]?.superseded);
+  return !s.link.proposal && !s.link.result && pages.length > 0 && pages.every((p) => p.state === 'VALIDATED') && mine.every((id) => pages.some((p) => p.page_id === id));
+}
+
+function offerLink(s: State): State {
+  const ready = readyToLink(s);
+  if (ready === s.link.offered) return s;
+  const next = { ...s, link: { ...s.link, offered: ready } };
+  return ready ? push(next, { from: 'bot', kind: 'finish_offer' }) : next;
+}
+
+/** The last message of a kind, if it is still the one with buttons: `offered`/`proposal` set and nothing decided. */
+function openMsg(s: State, kind: 'finish_offer' | 'link'): number | undefined {
+  if (s.link.result || (kind === 'finish_offer' ? !s.link.offered || s.link.proposal : !s.link.proposal)) return undefined;
+  return [...s.messages].reverse().find((m) => m.kind === kind)?.id;
+}
+export const activeOfferMsg = (s: State) => openMsg(s, 'finish_offer');
+export const activeLinkMsg = (s: State) => openMsg(s, 'link');
+
+export interface LinkButton {
+  id: 'patient' | 'create_new' | 'not_sure' | 'confirm_fiche' | 'retype';
+  label: string;
+  decision?: LinkDecision; // set for the three decisions; confirm_fiche / retype only act on the fiche number
+}
+
+/**
+ * The buttons of a link question. The 4-button question is [Patient 1] [Patient 2] [Aucune, créer] [Je ne sais pas]
+ * (one Patient button per candidate); a single proposed candidate is one tap away. Typing the key has a form, no buttons.
+ */
+export function linkButtons(p: LinkProposal): LinkButton[] {
+  const create: LinkButton = { id: 'create_new', label: p.question === 'create' ? 'Créer un nouveau dossier' : p.question === 'propose' ? 'Non, créer un nouveau dossier' : 'Aucune, créer', decision: { kind: 'create_new' } };
+  const unsure: LinkButton = { id: 'not_sure', label: 'Je ne sais pas', decision: { kind: 'not_sure' } };
+  switch (p.question) {
+    case 'need_key':
+      return [];
+    case 'confirm_fiche':
+      return [{ id: 'confirm_fiche', label: "Oui, c'est correct" }, { id: 'retype', label: 'Non, je la saisis' }];
+    case 'propose':
+      return [{ id: 'patient', label: `Oui, c'est le dossier ${p.candidates[0].patient_id}`, decision: { kind: 'patient', patient_id: p.candidates[0].patient_id } }, create, unsure];
+    case 'create':
+      return [create, unsure];
+    case 'choose':
+      return [...p.candidates.map((c, i): LinkButton => ({ id: 'patient', label: `Patient ${i + 1}`, decision: { kind: 'patient', patient_id: c.patient_id } })), create, unsure];
+  }
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`;
+
+/** What the bot says once the decision is stored. */
+export function linkResultText(r: LinkResult): string {
+  if (r.status === 'not_sure' || !r.patient) return "D'accord : ces pages sont mises de côté pour vérification (doublon possible). Rien n'est créé ni lié.";
+  const visits = r.visits ?? 1;
+  return `Dossier ${r.patient.id} ${visits > 1 ? 'mis à jour' : 'créé'} (${plural(visits, 'visite')})`;
 }
 
 /** Short label of a page in the page list. */
 export function pageStateLabel(page: PageView, progress?: PageProgress): string {
   if (page.superseded) return 'remplacée';
+  if (progress?.state === 'DUPLICATE_SUSPECTED') return 'à vérifier (doublon ?)';
+  if (progress && ['PATIENT_MATCHED', 'REGISTERED', 'SYNCED'].includes(progress.state)) return 'dossier enregistré';
   if (page.validated || progress?.state === 'VALIDATED') return 'validée';
   if (page.failed) return 'échec';
   if (page.fields === null) return 'analyse en cours';
@@ -240,8 +326,8 @@ export function queueLabel(item: QueueEntry, ctx: { offline: boolean; sending: b
 
 export function reducer(s: State, a: Action): State {
   switch (a.type) {
-    case 'session_started':
-      return push({ ...s, session: a.session }, { from: 'bot', kind: 'text', text: 'Session démarrée. Photographiez une page du registre.' });
+    case 'session_started': // a new session: its own page list, review and link (the conversation and its page views stay)
+      return push({ ...initialState, messages: s.messages, pages: s.pages, session: a.session }, { from: 'bot', kind: 'text', text: 'Session démarrée. Photographiez une page du registre.' });
     case 'say':
       return push(s, { from: a.from, kind: 'text', text: a.text, hint: a.hint });
     case 'session_restored': {
@@ -268,6 +354,14 @@ export function reducer(s: State, a: Action): State {
       return patchPage(s, a.pageId, (p) => ({ fields: p.fields?.map((f) => (f.field_id === a.field.field_id ? a.field : f)) ?? null }));
     case 'page_confirmed':
       return push(patchPage(s, a.pageId, () => ({ validated: true })), { from: 'bot', kind: 'text', text: 'Page confirmée.' });
+    case 'link_proposal':
+      return push({ ...s, link: { ...s.link, proposal: a.proposal } }, { from: 'bot', kind: 'link', proposal: a.proposal });
+    case 'link_decided': {
+      const done = push({ ...s, link: { ...s.link, result: a.result }, differences: a.result.differences }, { from: 'bot', kind: 'link_done', result: a.result });
+      return a.result.differences.length ? push(done, { from: 'bot', kind: 'differences' }) : done;
+    }
+    case 'differences_updated':
+      return { ...s, differences: a.differences };
     case 'reset':
       return initialState;
   }
@@ -281,4 +375,12 @@ export function toReview(page: PageView): string[] {
       .map((f) => f.field_id),
   );
   return page.flagged.filter((id) => open.has(id));
+}
+
+// Fields shown on a visit line of the record (when that visit's pages are the source of the retained value).
+const KEY_FIELDS = ['p01.province', 'p02.age', 'p02.gestation', 'p02.parite', 'p03.ddr', 'p03.date_prevue_d_accouchement', 'p03.taille'];
+
+/** Per visit (record order), the key values retained from that visit's own pages. */
+export function keyValuesByVisit(record: PatientRecord): PatientRecord['values'][] {
+  return record.visits.map((v) => record.values.filter((x) => KEY_FIELDS.includes(x.field_id) && v.pages.some((p) => p.page_id === x.source_page_id)));
 }

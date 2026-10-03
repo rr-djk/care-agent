@@ -1,0 +1,33 @@
+{
+"layout": "cover",
+"page_types": [1],
+"fields": [
+  {"id":"p01.n_deg_de_la_fiche","label_fr":"N° de la fiche","label_en":"Fiche number","type":"short_text","category":"admin_number","validators":[],"zone":"p01.identity"},
+  {"id":"p01.region","label_fr":"Région","label_en":"Region","type":"short_text","category":"short_text","validators":[],"zone":"p01.identity"},
+  {"id":"p01.province","label_fr":"Province","label_en":"Province","type":"short_text","category":"short_text","validators":[],"zone":"p01.identity"},
+  {"id":"p01.nom_de_l_etablissement_sanitaire","label_fr":"Nom de l'établissement sanitaire","label_en":"Health facility","type":"short_text","category":"short_text","validators":[],"zone":"p01.identity"},
+  {"id":"p01.dr","label_fr":"DR","label_en":"DR","type":"checkbox","category":"checkbox","validators":[],"zone":"p01.facility"},
+  {"id":"p01.csc","label_fr":"CSC","label_en":"CSC","type":"checkbox","category":"checkbox","validators":[],"zone":"p01.facility"},
+  {"id":"p01.csu","label_fr":"CSU","label_en":"CSU","type":"checkbox","category":"checkbox","validators":[],"zone":"p01.facility"},
+  {"id":"p01.csca","label_fr":"CSCA","label_en":"CSCA","type":"checkbox","category":"checkbox","validators":[],"zone":"p01.facility"},
+  {"id":"p01.csua","label_fr":"CSUA","label_en":"CSUA","type":"checkbox","category":"checkbox","validators":[],"zone":"p01.facility"},
+  {"id":"p01.fixe","label_fr":"Fixe","label_en":"Fixed","type":"checkbox","category":"checkbox","validators":[],"zone":"p01.facility"},
+  {"id":"p01.mobile","label_fr":"Mobile","label_en":"Mobile","type":"checkbox","category":"checkbox","validators":[],"zone":"p01.facility"},
+  {"id":"p01.grossesse_classee_a_risque","label_fr":"Grossesse classée à risque","label_en":"Pregnancy classified at risk","type":"checkbox","category":"checkbox","validators":[],"zone":"p01.risk"},
+  {"id":"p01.anemie","label_fr":"Anémie","label_en":"Anemia","type":"checkbox","category":"checkbox","validators":[],"zone":"p01.risk"},
+  {"id":"p01.metrorragie","label_fr":"Métrorragie","label_en":"Metrorrhagia","type":"checkbox","category":"checkbox","validators":[],"zone":"p01.risk"},
+  {"id":"p01.h_t_a","label_fr":"H.T.A","label_en":"Hypertension","type":"checkbox","category":"checkbox","validators":[],"zone":"p01.risk"},
+  {"id":"p01.infection","label_fr":"Infection","label_en":"Infection","type":"checkbox","category":"checkbox","validators":[],"zone":"p01.risk"},
+  {"id":"p01.diabete","label_fr":"Diabète","label_en":"Diabetes","type":"checkbox","category":"checkbox","validators":[],"zone":"p01.risk"},
+  {"id":"p01.pre_eclampsie","label_fr":"Pré-éclampsie","label_en":"Pre-eclampsia","type":"checkbox","category":"checkbox","validators":[],"zone":"p01.risk"},
+  {"id":"p01.cardiopathie","label_fr":"Cardiopathie","label_en":"Heart disease","type":"checkbox","category":"checkbox","validators":[],"zone":"p01.risk"},
+  {"id":"p01.eclampsie","label_fr":"Eclampsie","label_en":"Eclampsia","type":"checkbox","category":"checkbox","validators":[],"zone":"p01.risk"},
+  {"id":"p01.autres_a_preciser","label_fr":"Autres à préciser","label_en":"Other (specify)","type":"free_text","category":"free_text","validators":[],"zone":"p01.risk"}
+],
+"zones": [
+  {"id":"p01.identity","bbox_frac":[0.0425,0.104,0.8845,0.2278],"cells":["p01.n_deg_de_la_fiche","p01.region","p01.province","p01.nom_de_l_etablissement_sanitaire"]},
+  {"id":"p01.facility","bbox_frac":[0.0717,0.2519,0.7023,0.4029],"cells":["p01.dr","p01.csc","p01.csu","p01.csca","p01.csua","p01.fixe","p01.mobile"]},
+  {"id":"p01.risk","bbox_frac":[0.0507,0.503,0.8412,0.6916],"cells":["p01.grossesse_classee_a_risque","p01.anemie","p01.metrorragie","p01.h_t_a","p01.infection","p01.diabete","p01.pre_eclampsie","p01.cardiopathie","p01.eclampsie","p01.autres_a_preciser"]}
+],
+"masks": [[0.0801,0.4391,0.7259,0.4656]]
+}

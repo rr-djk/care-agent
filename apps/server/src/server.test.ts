@@ -11,6 +11,7 @@ import { seedUsers } from './auth';
 import { openDb } from './db';
 import { transition } from './lifecycle';
 import { openOriginals } from './originals';
+import { maskIdentifiers } from './privacy';
 import { EventStore } from './stream';
 import { createWorker, AnalysisError, type Analyzer } from './worker';
 import type { ChatMessage, ChatModelFn } from './chat-llm';
@@ -518,4 +519,271 @@ test('quality: meta.quality and the LOW_QUALITY flag are stored; LOW_QUALITY sen
   assert.match(item.text_fr, /qualité douteuse/);
   assert.equal((await t.patch('sf-01', low, 'a', { confirm: true })).status, 200); // the midwife can still confirm it
   assert.equal(((await fields(low)).find((f) => f.field_id === 'a')!).status, 'KNOWN');
+});
+
+// --- step 11: patient linking ----------------------------------------------------------------------------------
+
+/** Fields read per page type; a test sets `readings` before uploading (the fake analyzer returns them as KNOWN). */
+type Readings = Record<number, [string, string | boolean][]>;
+function linkSetup() {
+  const readings: Readings = {};
+  const analyzer: Analyzer = async (_img, pageType) =>
+    (readings[pageType] ?? []).map(([id, v]) => ({ ...field(id, 'KNOWN', typeof v === 'boolean' ? null : v), value: v, source_page: pageType }));
+  return { readings, analyzer };
+}
+const COVER = (fiche: string, facility = 'DR Tahannaout Sud', province = 'Al Haouz'): Readings[number] => [
+  ['p01.n_deg_de_la_fiche', fiche],
+  ['p01.nom_de_l_etablissement_sanitaire', facility],
+  ['p01.province', province],
+  ['p01.dr', true],
+];
+const IDENT: Readings[number] = [['p02.age', '28'], ['p02.gestation', '2'], ['p02.parite', '1']];
+
+/** A session with the given readings per page type, every page uploaded, analyzed and confirmed (VALIDATED). */
+async function validatedSession(t: Awaited<ReturnType<typeof setup>>, readings: Readings, per: Readings, user = 'sf-01') {
+  Object.assign(readings, per);
+  const res = await t.call(user, '/api/sessions', { method: 'POST', ...t.json({}) }); // no typed fiche: the cover is read
+  const sid = (await res.json()).id as string;
+  const pages: Record<number, string> = {};
+  for (const type of Object.keys(per).map(Number)) {
+    pages[type] = randomUUID();
+    await t.upload(user, sid, pages[type], { page_type: type, captured_at: `2026-10-03T10:0${type}:00.000Z` });
+  }
+  await t.settle();
+  for (const id of Object.values(pages)) assert.equal((await t.call(user, `/api/pages/${id}/confirm`, { method: 'POST' })).status, 200);
+  return { sid, pages };
+}
+const states = (t: Awaited<ReturnType<typeof setup>>, sid: string) =>
+  (t.db.prepare('SELECT state FROM pages WHERE session_id = ? ORDER BY rowid').all(sid) as { state: string }[]).map((r) => r.state);
+const link = (t: Awaited<ReturnType<typeof setup>>, user: string, sid: string, body: object) => t.call(user, `/api/sessions/${sid}/link`, { method: 'POST', ...t.json(body) });
+const candidates = async (t: Awaited<ReturnType<typeof setup>>, sid: string, user = 'sf-01') => (await t.call(user, `/api/patients/candidates?session_id=${sid}`)).json();
+
+test('linking: create after the question, then the same fiche proposes the patient; ids are sequential counters', async () => {
+  const { readings, analyzer } = linkSetup();
+  const t = await setup(analyzer);
+  const s1 = await validatedSession(t, readings, { 1: COVER('2026-711-003'), 2: IDENT, 3: [['p03.ddr', '12/03/2026'], ['p03.poids_kg.v1_t1', '70']] });
+
+  // nothing is created by asking
+  const q1 = await candidates(t, s1.sid);
+  assert.deepEqual([q1.question, q1.fiche.source, q1.fiche.value, q1.facility, q1.candidates], ['create', 'cover', '2026-711-003', 'DR Tahannaout Sud', []]);
+  assert.equal(t.count('patients'), 0);
+  assert.equal(t.count('session_links'), 0);
+  assert.deepEqual(states(t, s1.sid), ['VALIDATED', 'VALIDATED', 'VALIDATED']);
+
+  const created = await (await link(t, 'sf-01', s1.sid, { kind: 'create_new' })).json();
+  assert.deepEqual([created.status, created.patient.id, created.patient.fiche_number, created.patient.facility, created.visits, created.differences], ['linked', 'PAT-000001', '2026-711-003', 'DR Tahannaout Sud', 1, []]);
+  assert.deepEqual(states(t, s1.sid), ['REGISTERED', 'REGISTERED', 'REGISTERED']);
+  assert.equal(t.count('page_transitions', "to_state = 'PATIENT_MATCHED'"), 3);
+  assert.equal((await link(t, 'sf-01', s1.sid, { kind: 'create_new' })).status, 409); // a session is linked once
+  assert.equal(t.count('patients'), 1);
+
+  // a second woman: next id, whatever her data
+  const s2 = await validatedSession(t, readings, { 1: COVER('2026-999-012', 'CSCA Al Wifaq', 'Kénitra') });
+  assert.equal((await candidates(t, s2.sid)).question, 'create');
+  assert.equal((await (await link(t, 'sf-01', s2.sid, { kind: 'create_new' })).json()).patient.id, 'PAT-000002');
+
+  // the same fiche again (typed with other separators and case): the patient is proposed, still nothing is linked
+  const s3 = await validatedSession(t, readings, { 1: COVER('2026 711 003', 'dr tahannaout sud'), 2: [['p02.age', '28']] });
+  const q3 = await candidates(t, s3.sid);
+  assert.equal(q3.question, 'propose');
+  assert.deepEqual(q3.candidates.map((c: { patient_id: string; kind: string }) => [c.patient_id, c.kind]), [['PAT-000001', 'exact']]);
+  assert.deepEqual(q3.candidates[0].summary, { fiche_number: '2026-711-003', facility: 'DR Tahannaout Sud', age: 28, ddr: '12/03/2026', visits: 1, last_visit: q3.candidates[0].summary.last_visit });
+  assert.equal(t.count('patients'), 2);
+  assert.equal(t.count('session_links'), 2);
+  const second = await (await link(t, 'sf-01', s3.sid, { kind: 'patient', patient_id: 'PAT-000001' })).json();
+  assert.deepEqual([second.status, second.patient.id, second.visits], ['linked', 'PAT-000001', 2]);
+  assert.equal(t.count('patients'), 2); // linked, not duplicated
+  assert.equal((await link(t, 'sf-01', await (await validatedSession(t, readings, { 1: COVER('2026-111-111') })).sid, { kind: 'patient', patient_id: 'PAT-404040' })).status, 404);
+});
+
+test('linking: a near fiche asks the 4-button question; "Je ne sais pas" parks the session, then it is settled with the same endpoint', async () => {
+  const { readings, analyzer } = linkSetup();
+  const t = await setup(analyzer);
+  const first = await validatedSession(t, readings, { 1: COVER('2026-711-003'), 2: IDENT });
+  await link(t, 'sf-01', first.sid, { kind: 'create_new' });
+
+  const near = await validatedSession(t, readings, { 1: COVER('2026-711-008'), 2: IDENT });
+  const q = await candidates(t, near.sid);
+  assert.equal(q.question, 'choose');
+  assert.deepEqual(q.candidates.map((c: { patient_id: string; kind: string }) => [c.patient_id, c.kind]), [['PAT-000001', 'near_fiche']]);
+  assert.ok(q.candidates[0].reasons.some((r: string) => /presque identique/.test(r)));
+
+  const parked = await (await link(t, 'sf-01', near.sid, { kind: 'not_sure' })).json();
+  assert.deepEqual(parked, { status: 'not_sure', differences: [] });
+  assert.deepEqual(states(t, near.sid), ['DUPLICATE_SUSPECTED', 'DUPLICATE_SUSPECTED']);
+  assert.equal(t.count('patients'), 1); // nothing created
+  assert.equal((await (await link(t, 'sf-01', near.sid, { kind: 'not_sure' })).json()).status, 'not_sure'); // idempotent
+
+  // the to-review list: the supervisor sees it, the owner too, another midwife does not
+  const list = async (user: string) => (await t.call(user, '/api/review/duplicates')).json();
+  const sup = await list('sup-01');
+  assert.deepEqual(sup.map((d: { session_id: string; midwife_id: string }) => [d.session_id, d.midwife_id]), [[near.sid, 'sf-01']]);
+  assert.equal(sup[0].proposal.candidates[0].patient_id, 'PAT-000001');
+  assert.equal((await list('sf-01')).length, 1);
+  assert.deepEqual(await list('sf-02'), []);
+  assert.equal((await link(t, 'sup-01', near.sid, { kind: 'create_new' })).status, 403); // the supervisor reads, the midwife decides
+
+  // settled later: it is the same woman after all
+  const done = await (await link(t, 'sf-01', near.sid, { kind: 'patient', patient_id: 'PAT-000001' })).json();
+  assert.deepEqual([done.status, done.visits], ['linked', 2]);
+  assert.deepEqual(states(t, near.sid), ['REGISTERED', 'REGISTERED']);
+  assert.deepEqual(await list('sup-01'), []);
+  assert.equal(t.count('session_links', "decision = 'patient'"), 1);
+  assert.equal(t.count('page_transitions', "from_state = 'DUPLICATE_SUSPECTED' AND to_state = 'PATIENT_MATCHED'"), 2);
+});
+
+test('linking: a session with an unreadable fiche types it; a doubtful reading is confirmed first; contradicting age is not proposed', async () => {
+  const { readings, analyzer } = linkSetup();
+  const t = await setup(analyzer);
+  const base = await validatedSession(t, readings, { 1: COVER('2026-711-003'), 2: IDENT });
+  await link(t, 'sf-01', base.sid, { kind: 'create_new' });
+
+  const noFiche = await validatedSession(t, readings, { 1: [['p01.province', 'Al Haouz']] }); // fiche not read
+  assert.equal((await candidates(t, noFiche.sid)).question, 'need_key');
+  const typed = await t.call('sf-01', `/api/sessions/${noFiche.sid}`, { method: 'PATCH', ...t.json({ fiche_number: '2026-711-003', facility: 'DR Tahannaout Sud' }) });
+  assert.equal((await typed.json()).question, 'propose');
+  assert.equal((await t.call('sf-01', `/api/patients/candidates?fiche=2026-711-003&facility=DR%20Tahannaout%20Sud`)).status, 200);
+  const byKey = await (await t.call('sf-01', '/api/patients/candidates?fiche=2026-711-003&facility=dr%20tahannaout%20sud')).json();
+  assert.deepEqual([byKey.question, byKey.candidates[0].patient_id], ['propose', 'PAT-000001']);
+  assert.equal((await t.call('sf-01', '/api/patients/candidates?fiche=x')).status, 400);
+
+  const doubtful = await validatedSession(t, readings, { 1: COVER('2O26-711-OO3'), 2: IDENT });
+  const dq = await candidates(t, doubtful.sid);
+  assert.deepEqual([dq.question, dq.fiche.low_confidence, dq.candidates, dq.text_fr], ['confirm_fiche', true, [], "J'ai lu 2O26-711-OO3, est-ce correct ?"]);
+  const confirmed = await (await t.call('sf-01', `/api/sessions/${doubtful.sid}`, { method: 'PATCH', ...t.json({ fiche_number: '2O26-711-OO3' }) })).json();
+  assert.deepEqual([confirmed.question, confirmed.fiche.source, confirmed.candidates[0].patient_id], ['propose', 'typed', 'PAT-000001']);
+
+  // same key, but the age on the cover contradicts the record: asked with the reason, never proposed
+  const older = await validatedSession(t, readings, { 1: COVER('2026-711-003'), 2: [['p02.age', '41']] });
+  const oq = await candidates(t, older.sid);
+  assert.equal(oq.question, 'choose');
+  assert.equal(oq.candidates[0].consistent, false);
+  assert.ok(oq.candidates[0].reasons.some((r: string) => r.startsWith('Âge différent')));
+
+  // typed values are validated and kept free of identifiers
+  const patch = (body: object) => t.call('sf-01', `/api/sessions/${older.sid}`, { method: 'PATCH', ...t.json(body) });
+  assert.equal((await patch({})).status, 400);
+  assert.equal((await patch({ fiche_number: 'AB123456' })).status, 400); // CIN-like
+  assert.equal((await t.call('sf-02', `/api/sessions/${older.sid}`, { method: 'PATCH', ...t.json({ fiche_number: '1' }) })).status, 403);
+  assert.equal((await t.call('sf-01', `/api/sessions/${base.sid}`, { method: 'PATCH', ...t.json({ fiche_number: '1' }) })).status, 409); // already linked
+});
+
+test('linking: not ready, bad body, missing key, access to the record by role', async () => {
+  const { readings, analyzer } = linkSetup();
+  const t = await setup(analyzer);
+  Object.assign(readings, { 1: COVER('2026-711-003') });
+  const sid = (await (await t.call('sf-01', '/api/sessions', { method: 'POST', ...t.json({}) })).json()).id as string;
+  const page = randomUUID();
+  await t.upload('sf-01', sid, page, { page_type: 1 });
+  await t.settle();
+  assert.equal((await link(t, 'sf-01', sid, { kind: 'create_new' })).status, 409); // not VALIDATED yet
+  await t.call('sf-01', `/api/pages/${page}/confirm`, { method: 'POST' });
+  assert.equal((await link(t, 'sf-01', sid, { kind: 'nope' })).status, 400);
+  assert.equal((await link(t, 'sf-02', sid, { kind: 'not_sure' })).status, 403);
+  assert.equal((await link(t, 'sf-01', 'ghost', { kind: 'not_sure' })).status, 404);
+
+  const empty = await t.newSession(); // typed fiche '12' but no facility, no page
+  assert.equal((await link(t, 'sf-01', empty, { kind: 'create_new' })).status, 409);
+  const noFacility = await validatedSession(t, readings, { 1: [['p01.n_deg_de_la_fiche', '2026-111-001']] });
+  const res = await link(t, 'sf-01', noFacility.sid, { kind: 'create_new' });
+  assert.deepEqual([res.status, (await res.json()).code], [409, 'link_key_missing']);
+  assert.equal(t.count('patients'), 0);
+
+  await link(t, 'sf-01', sid, { kind: 'create_new' });
+  const get = (user: string, id: string) => t.call(user, `/api/patients/${id}`);
+  assert.equal((await get('sf-01', 'PAT-000001')).status, 200);
+  assert.equal((await get('sup-01', 'PAT-000001')).status, 200); // the supervisor sees all
+  assert.equal((await get('sf-02', 'PAT-000001')).status, 403); // no session of hers is linked to this patient
+  assert.equal((await get('sf-01', 'PAT-000099')).status, 404);
+  assert.equal((await t.app.request('/api/patients/PAT-000001')).status, 401);
+});
+
+test('SYNCED: only after the phone acknowledges the registered record; a replay changes nothing', async () => {
+  const { readings, analyzer } = linkSetup();
+  const t = await setup(analyzer);
+  const s = await validatedSession(t, readings, { 1: COVER('2026-711-003'), 2: IDENT });
+  const ack = (user = 'sf-01') => t.call(user, `/api/sessions/${s.sid}/ack`, { method: 'POST' });
+  assert.equal((await ack()).status, 409); // not registered yet
+  await link(t, 'sf-01', s.sid, { kind: 'create_new' });
+  assert.deepEqual(states(t, s.sid), ['REGISTERED', 'REGISTERED']);
+  assert.equal((await ack('sup-01')).status, 403);
+  assert.equal((await ack()).status, 200);
+  assert.deepEqual(states(t, s.sid), ['SYNCED', 'SYNCED']);
+  assert.equal((await ack()).status, 200);
+  assert.equal(t.count('page_transitions', "to_state = 'SYNCED'"), 2);
+});
+
+test('re-digitization: differences with old and new values, per-field choice, both pages stored, record shows the chosen values and their source', async () => {
+  const { readings, analyzer } = linkSetup();
+  const t = await setup(analyzer);
+  const v1 = [['p03.ddr', '12/03/2026'], ['p03.poids_kg.v1_t1', '70'], ['p03.poids_kg.v2_t1', '71'], ['p03.taille', '160']] as Readings[number];
+  const s1 = await validatedSession(t, readings, { 1: COVER('2026-711-003'), 3: v1 });
+  await link(t, 'sf-01', s1.sid, { kind: 'create_new' });
+
+  // the page photographed again: later column left blank, one value read differently, one new value
+  const s2 = await validatedSession(t, readings, { 1: COVER('2026-711-003'), 3: [['p03.ddr', '12/03/2026'], ['p03.poids_kg.v1_t1', '72'], ['p03.taille', ''], ['p03.poids_kg.v3_t1', '73']] });
+  const res = await (await link(t, 'sf-01', s2.sid, { kind: 'patient', patient_id: 'PAT-000001' })).json();
+  assert.equal(res.visits, 2);
+  const diffs = res.differences as { field_id: string; old_value: unknown; new_value: unknown; choice: string; decided: boolean; label_fr: string; old_date: string }[];
+  assert.deepEqual(diffs.map((d) => [d.field_id, d.old_value, d.new_value, d.choice, d.decided]), [
+    ['p03.poids_kg.v1_t1', '70', '72', 'new', false], // another usable value: the new one by default
+    ['p03.taille', '160', '', 'old', false], // new one empty: keep the old one by default
+  ]);
+  assert.equal(diffs[0].old_date, '2026-10-03T10:03:00.000Z');
+  assert.equal(t.count('pages'), 4); // both pages of type 3 are stored
+  assert.equal((await (await t.call('sf-01', `/api/sessions/${s2.sid}/redigitization`)).json()).length, 2);
+
+  const record = async () => (await (await t.call('sf-01', '/api/patients/PAT-000001')).json()) as { visits: unknown[]; values: { field_id: string; value: string; source_page_id: string; source_date: string }[] };
+  const value = (r: Awaited<ReturnType<typeof record>>, id: string) => r.values.find((v) => v.field_id === id);
+  let r = await record();
+  assert.equal(r.visits.length, 2);
+  assert.deepEqual([value(r, 'p03.poids_kg.v1_t1')?.value, value(r, 'p03.poids_kg.v1_t1')?.source_page_id], ['72', s2.pages[3]]);
+  assert.deepEqual([value(r, 'p03.taille')?.value, value(r, 'p03.taille')?.source_page_id], ['160', s1.pages[3]]);
+  assert.deepEqual([value(r, 'p03.poids_kg.v2_t1')?.value, value(r, 'p03.poids_kg.v3_t1')?.source_page_id], ['71', s2.pages[3]]); // added without a question
+  assert.equal(value(r, 'p03.ddr')?.source_page_id, s1.pages[3]); // same value: the first source stays
+  assert.equal(value(r, 'p03.ddr')?.source_date, '2026-10-03T10:03:00.000Z');
+
+  // the midwife flips both choices
+  const put = (body: object, sid = s2.sid, user = 'sf-01') => t.call(user, `/api/sessions/${sid}/redigitization`, { method: 'PUT', ...t.json(body) });
+  const saved = await (await put({ choices: [{ page_id: s2.pages[3], field_id: 'p03.poids_kg.v1_t1', choice: 'old' }, { page_id: s2.pages[3], field_id: 'p03.taille', choice: 'new' }] })).json();
+  assert.deepEqual(saved.map((d: { choice: string; decided: boolean }) => [d.choice, d.decided]), [['old', true], ['new', true]]);
+  r = await record();
+  assert.deepEqual([value(r, 'p03.poids_kg.v1_t1')?.value, value(r, 'p03.poids_kg.v1_t1')?.source_page_id], ['70', s1.pages[3]]);
+  assert.equal(value(r, 'p03.taille'), undefined); // "take the new one" = the field is empty
+  assert.equal(t.count('redigitization', 'decided_by = \'sf-01\''), 2);
+
+  assert.equal((await put({ choices: [{ page_id: s2.pages[3], field_id: 'p03.ddr', choice: 'old' }] })).status, 404); // not a difference
+  assert.equal((await put({ choices: [] })).status, 400);
+  assert.equal((await put({ choices: [{ page_id: s2.pages[3], field_id: 'p03.taille', choice: 'new' }] }, s2.sid, 'sf-02')).status, 403);
+  assert.equal((await put({ choices: [{ page_id: s2.pages[3], field_id: 'p03.taille', choice: 'new' }] }, s2.sid, 'sup-01')).status, 403);
+});
+
+test('privacy: a full linking flow leaves no identifier in the database (columns and values)', async () => {
+  const { readings, analyzer } = linkSetup();
+  const t = await setup(analyzer);
+  const s = await validatedSession(t, readings, { 1: COVER('2026-711-003'), 2: IDENT, 3: [['p03.ddr', '12/03/2026']] });
+  // an identifier typed in a free-text value is masked before it is stored (PATCH guard)
+  const note = randomUUID();
+  Object.assign(readings, { 4: [['p04.autres', '']] });
+  await t.upload('sf-01', s.sid, note, { page_type: 4 });
+  await t.settle();
+  await t.patch('sf-01', note, 'p04.autres', { value: 'Mme X 0612345678 AB123456 12 rue des Fleurs' });
+  await t.call('sf-01', `/api/pages/${note}/confirm`, { method: 'POST' });
+  await link(t, 'sf-01', s.sid, { kind: 'create_new' });
+
+  const FORBIDDEN = /^(name|nom|prenom|husband|mari|spouse|conjoint|cin|national|phone|telephone|tel|address|adresse)$/;
+  const tables = (t.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all() as { name: string }[]).map((r) => r.name);
+  for (const name of tables) {
+    for (const col of t.db.prepare(`PRAGMA table_info(${name})`).all() as { name: string }[]) {
+      assert.deepEqual(col.name.split('_').filter((w) => FORBIDDEN.test(w)), [], `${name}.${col.name}`);
+    }
+  }
+  assert.deepEqual(t.db.prepare('SELECT * FROM patients').all(), [{ id: 'PAT-000001', fiche_number: '2026-711-003', facility: 'DR Tahannaout Sud', created_at: (t.db.prepare('SELECT created_at FROM patients').get() as { created_at: string }).created_at }]);
+  // generic identifier patterns over every value that could carry text (ids and hashes are random hex, left out)
+  const dump = ['patients', 'sessions', 'session_links', 'redigitization', 'fields', 'audit']
+    .map((name) => JSON.stringify(t.db.prepare(`SELECT * FROM ${name}`).all()))
+    .join('\n');
+  assert.equal(maskIdentifiers(dump.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, '')).masked, false);
+  assert.ok(dump.includes('[masqué]'));
+  assert.ok(!/0612345678|AB123456|Fleurs/.test(dump));
 });

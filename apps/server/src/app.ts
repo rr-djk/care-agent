@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
 import { z } from 'zod';
-import { RecordPage, type StreamEvent } from '@care-agent/schema';
+import { LinkDecision, RecordPage, type StreamEvent } from '@care-agent/schema';
 import { login, userForToken, type AuthUser } from './auth';
 import { deterministicReply, NOTHING_TO_REVIEW, type ChatTarget } from './chat';
 import { runToolAgent, type ChatModelFn } from './chat-llm';
@@ -11,6 +11,7 @@ import { ApiError } from './errors';
 import { applyFieldEdit, pageSchemaFor, parseEdit, reviewedFields } from './fields';
 import { transition } from './lifecycle';
 import { sniffContentType, type OriginalStore } from './originals';
+import { acknowledge, differencesOf, duplicates, linkSession, patientRecord, proposalFor, proposalForKey, saveChoices } from './patients';
 import { maskIdentifiers } from './privacy';
 import { buildReview } from './review';
 import type { EventStore } from './stream';
@@ -36,6 +37,7 @@ const parseJson = (text: string): unknown => {
 
 const PING_MS = 10_000;
 const MAX_CHAT_CHARS = 500;
+const MAX_KEY_CHARS = 80; // fiche number or facility typed by the midwife
 
 export function createApp({ db, originals, events, worker, model, inkOnly, chatModel }: AppDeps) {
   const app = new Hono<{ Variables: { user: AuthUser } }>();
@@ -207,6 +209,76 @@ export function createApp({ db, originals, events, worker, model, inkOnly, chatM
     ownSession(c.get('user'), c.req.param('id'));
     return c.json(loadReview(c.req.param('id')));
   });
+
+  // --- step 11: patient linking (docs/api.md). Read-only until the midwife decides; nothing is created silently. ---
+
+  /** The midwife types or confirms the fiche number / facility of her session (wins over the cover reading). */
+  app.patch('/api/sessions/:id', async (c) => {
+    const user = c.get('user');
+    midwifeOnly(user);
+    const id = c.req.param('id');
+    ownSession(user, id);
+    const body = await c.req.json().catch(() => ({}));
+    const value = (v: unknown) => (typeof v === 'string' && v.trim() && v.trim().length <= MAX_KEY_CHARS ? v.trim() : undefined);
+    const [fiche, facility] = [value(body.fiche_number), value(body.facility)];
+    if (!fiche && !facility) throw new ApiError(400, 'bad_request', `body needs { fiche_number?, facility? } (1..${MAX_KEY_CHARS} chars)`);
+    if ([fiche, facility].some((v) => v && maskIdentifiers(v).masked)) throw new ApiError(400, 'bad_request', 'this looks like a personal identifier: only the fiche number and the facility are stored');
+    const linked = db.prepare("SELECT 1 FROM session_links WHERE session_id = ? AND decision != 'not_sure'").get(id);
+    if (linked) throw new ApiError(409, 'already_linked', 'this session is already linked');
+    db.prepare('UPDATE sessions SET fiche_number = COALESCE(?, fiche_number), facility = COALESCE(?, facility) WHERE id = ?').run(fiche ?? null, facility ?? null, id);
+    return c.json(proposalFor(db, id));
+  });
+
+  // by session (its cover reading or what the midwife typed, plus age/LMP/gravidity/parity/province) or by typed fiche + facility
+  app.get('/api/patients/candidates', (c) => {
+    const user = c.get('user');
+    const { session_id, fiche, facility } = c.req.query();
+    if (session_id) {
+      ownSession(user, session_id);
+      return c.json(proposalFor(db, session_id));
+    }
+    if (!fiche?.trim() || !facility?.trim()) throw new ApiError(400, 'bad_request', 'query needs session_id, or fiche and facility');
+    return c.json(proposalForKey(db, fiche, facility));
+  });
+
+  app.get('/api/patients/:id', (c) => c.json(patientRecord(db, c.get('user'), c.req.param('id'))));
+
+  app.post('/api/sessions/:id/link', async (c) => {
+    const user = c.get('user');
+    midwifeOnly(user);
+    ownSession(user, c.req.param('id'));
+    const decision = LinkDecision.safeParse(await c.req.json().catch(() => ({})));
+    if (!decision.success) throw new ApiError(400, 'bad_request', 'body needs { kind: "patient", patient_id } or { kind: "create_new" } or { kind: "not_sure" }');
+    return c.json(linkSession(db, user, c.req.param('id'), decision.data));
+  });
+
+  // re-digitization: differences between the session's pages and the record, and the midwife's choice per field
+  app.get('/api/sessions/:id/redigitization', (c) => {
+    ownSession(c.get('user'), c.req.param('id'));
+    return c.json(differencesOf(db, c.req.param('id')));
+  });
+
+  app.put('/api/sessions/:id/redigitization', async (c) => {
+    const user = c.get('user');
+    midwifeOnly(user);
+    ownSession(user, c.req.param('id'));
+    const body = z
+      .object({ choices: z.array(z.object({ page_id: z.string(), field_id: z.string(), choice: z.enum(['old', 'new']) })).min(1) })
+      .safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) throw new ApiError(400, 'bad_request', 'body needs { choices: [{ page_id, field_id, choice: "old" | "new" }] }');
+    return c.json(saveChoices(db, user, c.req.param('id'), body.data.choices));
+  });
+
+  // the phone acknowledges the registered record: REGISTERED -> SYNCED
+  app.post('/api/sessions/:id/ack', (c) => {
+    const user = c.get('user');
+    midwifeOnly(user);
+    ownSession(user, c.req.param('id'));
+    acknowledge(db, user, c.req.param('id'));
+    return c.json({ status: 'SYNCED' });
+  });
+
+  app.get('/api/review/duplicates', (c) => c.json(duplicates(db, c.get('user'))));
 
   app.post('/api/chat', async (c) => {
     const user = c.get('user');

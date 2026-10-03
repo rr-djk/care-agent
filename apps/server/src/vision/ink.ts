@@ -89,7 +89,8 @@ export function checkboxInkRatio(page: PageImage, bbox: BBoxFrac): number {
 // Thresholds chosen with `npm run ink-eval` on the 80 specimen pages: checkboxes precision/recall 1.00 (all layouts).
 // Text: 0.002 gives precision 1.00 / recall ≥ 0.997 except on delivery, whose dotted lines leak (precision 0.77);
 // 0.01 gives delivery precision and recall 1.00 but drops pregnancy recall to 0.88, hence one threshold per layout.
-const TEXT_INK_MIN: Record<string, number> = { delivery: 0.01 };
+// The cover has the same dotted line ("Autres à préciser"): 0.01 gives precision and recall 1.00 on its 10 pages.
+const TEXT_INK_MIN: Record<string, number> = { delivery: 0.01, cover: 0.01 };
 const TEXT_INK_DEFAULT = 0.002;
 const CHECKBOX_INK_MIN = 0.05; // lowest ticked box measured: 0.107, highest empty box: < 0.002
 

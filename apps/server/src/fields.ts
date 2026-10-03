@@ -15,7 +15,7 @@ export type FieldEdit = { confirm: true } | { value: string | boolean | null; st
 /** The updated field; `text_fr` says in French what the agent did not accept or changed (masked identifier, failed rule). */
 export type EditResult = ExtractedField & { text_fr?: string };
 
-/** Page schema of a stored page; undefined for page types without one (the cover has no schema yet). */
+/** Page schema of a stored page; undefined for page types without one (pages 5 to 8 have no schema yet). */
 export function pageSchemaFor(pageType?: number): PageSchema | undefined {
   const layout = PAGE_LAYOUTS.find((l) => l === LAYOUT[pageType as keyof typeof LAYOUT]);
   return layout ? loadPageSchema(layout) : undefined;

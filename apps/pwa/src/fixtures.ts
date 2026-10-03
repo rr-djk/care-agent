@@ -1,7 +1,7 @@
 // VITE_FIXTURES=1: canned API for building and testing the UI without the server or the model.
 // Demo: the 1st page has one doubt and one illegible field; the 2nd fails (AI unavailable) and goes to manual entry;
 // a retake gives a clean page. Rules are canned (the real ones live on the server).
-import type { ExtractedField, RecordPage, ReviewItem, ReviewQueue, Session, Status } from '@care-agent/schema';
+import type { Difference, ExtractedField, LinkDecision, LinkProposal, LinkResult, PatientRecord, RecordPage, ReviewItem, ReviewQueue, Session, Status } from '@care-agent/schema';
 import type { Auth, FieldEdit, FieldResult } from './api';
 import { ApiError } from './errors';
 import { fieldDef, fieldLabel } from './schemas';
@@ -189,5 +189,36 @@ export const api = {
     if (open.length) fail('fields_need_review', 'fields still need review', open);
     page.state = 'VALIDATED';
     return { id: pageId, state: 'VALIDATED' } as RecordPage;
+  },
+  // Canned linking: the fiche is read as 2026-711-003 at "DR Tahannaout Sud"; the first decision creates PAT-000001.
+  async getProposal(sessionId: string): Promise<LinkProposal> {
+    return {
+      session_id: sessionId,
+      fiche: { value: '2026-711-003', source: 'cover', low_confidence: false },
+      facility: 'DR Tahannaout Sud',
+      question: 'create',
+      text_fr: 'Aucun dossier ne correspond à la fiche 2026-711-003 (DR Tahannaout Sud). Créer un nouveau dossier ?',
+      candidates: [],
+    };
+  },
+  async setSessionKey(sessionId: string): Promise<LinkProposal> {
+    return this.getProposal(sessionId);
+  },
+  async link(_sessionId: string, decision: LinkDecision): Promise<LinkResult> {
+    for (const p of pages) p.state = decision.kind === 'not_sure' ? 'DUPLICATE_SUSPECTED' : 'REGISTERED';
+    if (decision.kind === 'not_sure') return { status: 'not_sure', differences: [] };
+    return { status: 'linked', patient: { id: 'PAT-000001', fiche_number: '2026-711-003', facility: 'DR Tahannaout Sud', created_at: new Date().toISOString() }, visits: 1, differences: [] };
+  },
+  async saveChoices(): Promise<Difference[]> {
+    return [];
+  },
+  async acknowledge(): Promise<void> {},
+  async getPatient(id: string): Promise<PatientRecord> {
+    const now = new Date().toISOString();
+    return {
+      patient: { id, fiche_number: '2026-711-003', facility: 'DR Tahannaout Sud', created_at: now },
+      visits: [{ session_id: sessionId, date: now, pages: pages.map((p) => ({ page_id: p.id, page_type: p.type, captured_at: now, state: p.state })) }],
+      values: [{ page_type: 3, field_id: 'p03.ddr', label_fr: 'DDR', value: '12/03/2026', source_page_id: pages[0]?.id ?? '', source_date: now }],
+    };
   },
 };

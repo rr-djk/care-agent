@@ -37,7 +37,7 @@ const analyzerOn = mode !== 'off' && mode !== 'ink';
 async function decode(image: Buffer, pageType: number) {
   const schema = pageSchemaFor(pageType);
   const layout = PAGE_LAYOUTS.find((l) => l === schema?.layout);
-  if (!schema || !layout) throw new AnalysisError('page_type_unsupported'); // e.g. the cover has no schema yet
+  if (!schema || !layout) throw new AnalysisError('page_type_unsupported'); // e.g. pages 5 to 8 have no schema yet
   const { data, info } = await sharp(image).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   // rectified in memory before reading; the stored original is never touched
   return { layout, schema, page: await rectify({ data, width: info.width, height: info.height }) };

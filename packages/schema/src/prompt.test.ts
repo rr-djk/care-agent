@@ -40,7 +40,7 @@ test('form zone prompt matches the committed snapshot and stays short', () => {
 });
 
 test('every zone of every layout builds a prompt (13-cell form zones are the longest)', () => {
-  for (const l of ['identification', 'pregnancy', 'delivery'] as const) {
+  for (const l of ['cover', 'identification', 'pregnancy', 'delivery'] as const) {
     const s = loadPageSchema(l);
     for (const z of s.zones) assert.ok(words(buildZonePrompt(s, z.id).prompt) < 140, z.id);
   }

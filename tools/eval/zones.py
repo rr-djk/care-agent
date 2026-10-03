@@ -10,7 +10,7 @@ Identifier fields have no cell; their areas are listed in `masks` so a cropper c
 Template geometry = patient 1's page (the least skewed one) plus, for handwriting that
 sits outside every printed slot, the union of the boxes seen on all patients.
 
-Writes data/zones/<layout>.json for the layouts of steps 3 and 4 (pages 2, 3, 4).
+Writes data/zones/<layout>.json for pages 1 (cover, step 11), 2, 3 and 4.
 """
 import json
 from pathlib import Path
@@ -25,6 +25,11 @@ MAX_TEXT_CELLS = 24
 # around the cells so the crop shows the printed labels and headers; in split tables only the first
 # column group gets the left pad (row labels) and the first row group the top pad (column headers).
 PLANS = {
+    "cover": (1, [
+        ("identity", (0, 0.25), None, None, (0.1, 0.02, 0.012, 0.008)),
+        ("facility", (0.25, 0.45), None, None, (0.08, 0.1, 0.03, 0.01)),
+        ("risk", (0.45, 1), None, None, (0.05, 0.1, 0.02, 0.01)),
+    ]),
     "identification": (2, [
         ("identity", (0, 0.235), None, None, (0.09, 0.02, 0.01, 0.008)),
         ("antecedents", (0.235, 0.42), None, None, (0.15, 0.02, 0.02, 0.01)),

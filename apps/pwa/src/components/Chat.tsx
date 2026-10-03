@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
-import type { Flag, QualityResult, RecordPage } from '@care-agent/schema';
+import type { Difference, Flag, LinkDecision, QualityResult, RecordPage } from '@care-agent/schema';
 import { api, type Auth, type FieldEdit } from '../api';
 import { ApiError } from '../errors';
 import { readEvents } from '../ndjson';
@@ -9,11 +9,14 @@ import { sync } from '../offline/sync';
 import { checkPhoto } from '../quality/client';
 import { cameraAvailable } from '../quality/guide';
 import { fieldLabel } from '../schemas';
-import { activeItemMsg, currentItem, errorText, initialState, pageLabel, pageStateLabel, queueLabel, reducer } from '../state';
+import { activeItemMsg, activeLinkMsg, activeOfferMsg, currentItem, errorText, initialState, linkResultText, pageLabel, pageStateLabel, queueLabel, reducer } from '../state';
 import { CameraCapture } from './CameraCapture';
 import { Composer } from './Composer';
+import { DifferencesCard } from './DifferencesCard';
+import { LinkCard } from './LinkCard';
 import { PageSummary } from './PageSummary';
 import { QualityPanel } from './QualityPanel';
+import { RecordView } from './RecordView';
 import { ReviewCard } from './ReviewCard';
 
 const STREAM_IDLE_MS = 30_000; // the server pings every 10 s: silence means the connection is dead
@@ -36,6 +39,7 @@ export function Chat({ auth, onLogout, onWipe }: { auth: Auth; onLogout: () => v
   const fileInput = useRef<HTMLInputElement>(null);
   const picking = useRef<{ pageType: number; replaces?: string } | null>(null);
   const [capturing, setCapturing] = useState<Capturing | null>(null);
+  const [record, setRecord] = useState<string | null>(null); // patient id of the open record view
 
   useEffect(() => {
     end.current?.scrollIntoView({ block: 'end' });
@@ -227,6 +231,48 @@ export function Chat({ auth, onLogout, onWipe }: { auth: Auth; onLogout: () => v
     }
   };
 
+  /** The link question. Needs the server: offline (or unreachable) the question simply waits and the button stays. */
+  const askLink = async () => {
+    if (!state.session) return;
+    try {
+      dispatch({ type: 'link_proposal', proposal: await api.getProposal(state.session.id) });
+    } catch (e) {
+      fail(e);
+    }
+  };
+
+  /** The midwife types or confirms the fiche number: the question is asked again with the new key. */
+  const setKey = async (key: { fiche_number?: string; facility?: string }) => {
+    if (!state.session) return;
+    try {
+      dispatch({ type: 'link_proposal', proposal: await api.setSessionKey(state.session.id, key) });
+    } catch (e) {
+      fail(e);
+    }
+  };
+
+  /** Stores the decision, then acknowledges the registered record (SYNCED) once the phone has it. */
+  const decide = async (decision: LinkDecision) => {
+    if (!state.session) return;
+    try {
+      const result = await api.link(state.session.id, decision);
+      dispatch({ type: 'link_decided', result });
+      if (result.status === 'linked') await api.acknowledge(state.session.id);
+      await refresh();
+    } catch (e) {
+      fail(e);
+    }
+  };
+
+  const choose = async (d: Difference, choice: 'old' | 'new') => {
+    if (!state.session) return;
+    try {
+      dispatch({ type: 'differences_updated', differences: await api.saveChoices(state.session.id, [{ page_id: d.page_id, field_id: d.field_id, choice }]) });
+    } catch (e) {
+      fail(e);
+    }
+  };
+
   const head = currentItem(state);
   const chat = async (message: string) => {
     if (!state.session || !head) return;
@@ -241,6 +287,8 @@ export function Chat({ auth, onLogout, onWipe }: { auth: Auth; onLogout: () => v
   };
 
   const active = activeItemMsg(state);
+  const activeOffer = activeOfferMsg(state);
+  const activeLink = activeLinkMsg(state);
   const progressOf = (pageId: string) => state.review?.progress.pages.find((p) => p.page_id === pageId);
   const offline = isOffline();
   const unsent = local.filter((p) => p.state !== 'UPLOADED').length;
@@ -317,6 +365,25 @@ export function Chat({ auth, onLogout, onWipe }: { auth: Auth; onLogout: () => v
                 )}
               </>
             )}
+            {m.kind === 'finish_offer' && (
+              <>
+                <p>Toutes les pages sont confirmées. Photographiez les pages suivantes si besoin, sinon choisissons le dossier de la patiente.</p>
+                {m.id === activeOffer && (
+                  <>
+                    <button className="primary wide" onClick={() => void askLink()} disabled={offline}>C'était la dernière page : choisir le dossier</button>
+                    {offline && <p className="hint">Hors ligne : la question attend la connexion au serveur.</p>}
+                  </>
+                )}
+              </>
+            )}
+            {m.kind === 'link' && <LinkCard proposal={m.proposal} active={m.id === activeLink} offline={offline} onDecide={(d) => void decide(d)} onSetKey={(k) => void setKey(k)} />}
+            {m.kind === 'link_done' && (
+              <>
+                <p>{linkResultText(m.result)}</p>
+                {m.result.patient && <button className="wide" onClick={() => setRecord(m.result.patient!.id)}>Voir le dossier {m.result.patient.id}</button>}
+              </>
+            )}
+            {m.kind === 'differences' && <DifferencesCard differences={state.differences} onChoose={(d, c) => void choose(d, c)} />}
             {m.kind === 'manual_offer' && (
               <>
                 <p>L'assistant d'analyse est indisponible pour cette page. Vous pouvez la saisir à la main : je vous guiderai champ par champ.</p>
@@ -327,6 +394,7 @@ export function Chat({ auth, onLogout, onWipe }: { auth: Auth; onLogout: () => v
         ))}
         <div ref={end} />
       </main>
+      {record && <RecordView patientId={record} onClose={() => setRecord(null)} />}
       <input
         ref={fileInput}
         type="file"
