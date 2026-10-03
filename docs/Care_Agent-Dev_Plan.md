@@ -11,7 +11,7 @@ Decisions taken since this plan was written: Vite + React for the PWA, Hono for 
 | Step | Content | Status |
 | --- | --- | --- |
 | 1 | Scaffold, dataset hash guard, latency probe (GO/NO-GO for Gemma 4 E4B on CPU) | Code done on `feature/step-1-scaffold-latency-gate`; measured with Ollama 0.35.1 + `gemma4:e4b`: strict rule NO-GO (~40 s per zone at best), good reading quality with a row × visit schema. **Validated: GO with a compact output format** (native API, values only in a fixed order, asynchronous analysis); merged into `main` |
-| 2 | Shared contracts (`packages/schema`), dedupe, 3-way patient split | Not started |
+| 2 | Shared contracts (`packages/schema`), dedupe, 3-way patient split | **Validated, merged into `main`**: zod contracts (statuses, fields, compact zone answer, lifecycle, entities, NDJSON events), `docs/api.md` v0, 80 unique pages, split tune = patients 2, 3, 4, 8 · calibrate = 1, 5, 7 · verify = 6, 9, 10 (seed 20261003) |
 | 3 | Ground truth from the PDF, minimal eval, automatic zones | Not started |
 | 4 | Page schemas as data: pages 2, 3, 4 | Not started |
 | 5 | Vertical slice by CLI: crop → model → validated fields with statuses | Not started |

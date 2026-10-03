@@ -2,5 +2,16 @@
   "name": "@care-agent/schema",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test src/*.test.ts"
+  },
+  "dependencies": {
+    "zod": "4.6.5"
+  }
 }
