@@ -11,6 +11,7 @@ Test input: `tools/smoke/out/p03_crop.png` (706×512), rows "Rendez-vous" to "É
 | Thinking control | Native API: `"think": false` works (0 thinking characters). OpenAI-compatible API: `think` is ignored; use `"reasoning_effort": "none"` |
 | JSON-schema output works | Yes, native API `format: <JSON schema>` → valid JSON |
 | Logprobs returned | Yes, native API `logprobs: true, top_logprobs: 1` |
+| Logprobs per token | No: with `gemma4:e4b` on Ollama 0.35.1 `logprobs: true` returns only the first token (native and `/v1`, streamed or not), so per-cell token probabilities are unavailable |
 | Visual token budget mechanism | Not found in Ollama. Prompt is ~200 tokens per crop whatever we ask, so the image costs a roughly fixed number of tokens. Unverified whether it can be changed; to see small handwriting, make the crop smaller rather than raising a budget |
 | RAM | ~10 GB available while the model ran; not measured precisely (the runner process is not named `ollama`, so `RUNTIME_PROC=ollama` only caught the server) |
 
