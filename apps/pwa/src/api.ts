@@ -1,6 +1,7 @@
 import type { ExtractedField, RecordPage, ReviewQueue, Role, Session } from '@care-agent/schema';
 import { ApiError } from './errors';
 import * as fixtures from './fixtures';
+import { netBlocked, setReachable } from './offline/network';
 
 const STORAGE_KEY = 'care-agent.auth';
 
@@ -15,30 +16,40 @@ export interface Auth {
   userId: string;
 }
 
-// Bearer token: in memory, mirrored in sessionStorage so a reload keeps the login (cleared when the tab closes).
-let auth: Auth | null = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? 'null');
+// Bearer token: in memory only. The encrypted copy lives in the device vault (offline/store.ts), unlocked with the PIN.
+let auth: Auth | null = null;
 
 export const getAuth = () => auth;
 
 export function setAuth(next: Auth | null) {
   auth = next;
-  if (next) sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  else sessionStorage.removeItem(STORAGE_KEY);
 }
 
-async function request(path: string, init: RequestInit = {}): Promise<Response> {
-  const headers = new Headers(init.headers);
+const REQUEST_TIMEOUT_MS = 30_000; // headers must arrive in time (the NDJSON stream only needs its headers)
+
+async function request(path: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<Response> {
+  if (netBlocked()) throw new ApiError('network', 'offline mode'); // simulation or browser offline: no network call at all
+  const { timeoutMs = REQUEST_TIMEOUT_MS, ...rest } = init;
+  const headers = new Headers(rest.headers);
   if (auth) headers.set('Authorization', `Bearer ${auth.token}`);
+  const ac = new AbortController();
+  const stop = () => ac.abort();
+  rest.signal?.addEventListener('abort', stop, { once: true });
+  const timer = setTimeout(stop, timeoutMs);
   let res: Response;
   try {
-    res = await fetch(`/api${path}`, { ...init, headers });
+    res = await fetch(`/api${path}`, { ...rest, headers, signal: ac.signal });
   } catch (e) {
-    if (init.signal?.aborted) throw e;
+    if (rest.signal?.aborted) throw e;
+    setReachable(false);
     throw new ApiError('network', 'server unreachable');
+  } finally {
+    clearTimeout(timer);
   }
+  setReachable(res.status < 500); // a 5xx from the dev proxy means the server is down
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new ApiError(body.code ?? 'http_error', body.text ?? `HTTP ${res.status}`, body.field_ids);
+    throw new ApiError(body.code ?? 'http_error', body.text ?? `HTTP ${res.status}`, body.field_ids, res.status);
   }
   return res;
 }
@@ -54,10 +65,16 @@ const live = {
     const { token, role } = await (await request('/login', json({ user_id, pin }))).json();
     return { token, role, userId: user_id };
   },
-  async createSession(fiche_number?: string, facility?: string): Promise<Session> {
-    return (await request('/sessions', json({ fiche_number: fiche_number || undefined, facility: facility || undefined }))).json();
+  /** Idempotent by `session.id` (created on the phone, possibly offline). */
+  async createSession(session: Session): Promise<Session> {
+    const { id, fiche_number, facility } = session;
+    return (await request('/sessions', json({ id, fiche_number, facility }))).json();
   },
-  async uploadPage(meta: RecordPage, image: File): Promise<RecordPage> {
+  /** Cheap reachability probe for the sync engine. */
+  async health(): Promise<void> {
+    await request('/health', { timeoutMs: 3_000 });
+  },
+  async uploadPage(meta: RecordPage, image: Blob): Promise<RecordPage> {
     const form = new FormData();
     form.append('meta', JSON.stringify(meta));
     form.append('image', image);

@@ -12,14 +12,15 @@ function parseLine(line: string): StreamEvent | null {
   }
 }
 
-/** Reads an NDJSON body line by line (lines may span chunks); pings are dropped, a bad line becomes an `error` event. */
-export async function* readEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<StreamEvent> {
+/** Reads an NDJSON body line by line (lines may span chunks); pings are dropped, a bad line becomes an `error` event. `onActivity` runs on every chunk (idle watchdog). */
+export async function* readEvents(body: ReadableStream<Uint8Array>, onActivity?: () => void): AsyncGenerator<StreamEvent> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
   try {
     for (;;) {
       const { done, value } = await reader.read();
+      onActivity?.(); // pings are dropped below, but they still prove the connection is alive
       buffer += decoder.decode(value, { stream: !done });
       const lines = buffer.split('\n');
       buffer = done ? '' : lines.pop()!;

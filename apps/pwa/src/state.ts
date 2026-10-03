@@ -44,6 +44,15 @@ const ERRORS: Record<string, string> = {
   page_not_failed: "Cette page n'est pas en échec.",
   manual_unavailable: "La saisie manuelle n'est pas disponible.",
   bad_request: "Cette demande n'a pas pu être traitée.",
+  http_error: 'Le serveur a répondu par une erreur.',
+  invalid_meta: 'Les informations de la page sont invalides.',
+  not_found: 'Page ou ressource introuvable sur le serveur.',
+  forbidden: "Ce compte n'a pas le droit d'envoyer cette page.",
+  session_id_taken: 'Cette session appartient à un autre compte.',
+  local_data_missing: "L'image n'est plus sur l'appareil.",
+  wrong_pin: 'Code PIN incorrect.',
+  no_token: 'Vous êtes déconnecté : connectez-vous en ligne.',
+  device_pin_mismatch: "Ce code PIN diffère de celui de cet appareil, qui garde des pages non envoyées. Utilisez l'ancien code.",
 };
 
 export const errorText = (code: string) => ERRORS[code] ?? 'Une erreur est survenue.';
@@ -67,6 +76,13 @@ export interface PageView {
   superseded: boolean; // replaced by a retake
 }
 
+/** Local queue entry as the UI needs it (the stored page, without its meta). */
+export interface QueueEntry {
+  state: 'CAPTURED' | 'UPLOADED' | 'SYNC_FAILED';
+  attempts: number;
+  error?: string;
+}
+
 export interface State {
   session: Session | null;
   messages: Msg[];
@@ -74,13 +90,15 @@ export interface State {
   order: string[]; // page ids in capture order
   review: ReviewQueue | null; // last queue loaded from the server
   shown: string | null; // key of the last review item put in the chat
+  seen: Record<string, true>; // identities of the analysis events already applied (a reconnect replays the stored ones)
 }
 
-export const initialState: State = { session: null, messages: [], pages: {}, order: [], review: null, shown: null };
+export const initialState: State = { session: null, messages: [], pages: {}, order: [], review: null, shown: null, seen: {} };
 
 export type Action =
   | { type: 'session_started'; session: Session }
   | { type: 'say'; from: 'bot' | 'user'; text: string; hint?: string }
+  | { type: 'session_restored'; session: Session; pages: { id: string; pageType?: number; replaces?: string }[] }
   | { type: 'page_added'; pageId: string; pageType: number; replaces?: string }
   | { type: 'review_loaded'; queue: ReviewQueue }
   | { type: 'event'; event: StreamEvent }
@@ -111,7 +129,29 @@ export function countByStatus(fields: ExtractedField[]) {
   return counts;
 }
 
+/** Identity of an analysis event: page_id + type (+ field or code). `record_ready` repeats legitimately, so it also carries the number of settled pages. */
+function eventKey(s: State, e: StreamEvent): string | null {
+  switch (e.type) {
+    case 'page_received':
+    case 'page_read':
+      return `${e.type}|${e.page_id}`;
+    case 'field_flagged':
+      return `${e.type}|${e.page_id}|${e.field_id}`;
+    case 'error':
+      return e.page_id ? `${e.type}|${e.page_id}|${e.code}` : null; // chat errors have no page
+    case 'record_ready':
+      return `${e.type}|${e.record_id}|${Object.values(s.pages).filter((p) => p.fields !== null || p.failed).length}`;
+    default:
+      return null; // token, done, ping: chat stream, never replayed
+  }
+}
+
 function onEvent(s: State, e: StreamEvent): State {
+  const key = eventKey(s, e);
+  if (key) {
+    if (s.seen[key]) return s; // replay after a reconnect: already shown
+    s = { ...s, seen: { ...s.seen, [key]: true } };
+  }
   switch (e.type) {
     case 'page_received':
       return push(patchPage(s, e.page_id, () => ({})), {
@@ -182,19 +222,42 @@ export function pageStateLabel(page: PageView, progress?: PageProgress): string 
   return progress ? `${progress.done}/${progress.total} vérifiés` : 'lue';
 }
 
+/**
+ * Label of a page that is (or was) in the local queue; null once the server has analysed it (pageStateLabel takes over).
+ * `offline`: no connection right now. `sending`: this page is being uploaded.
+ */
+export function queueLabel(item: QueueEntry, ctx: { offline: boolean; sending: boolean; analysed: boolean }): string | null {
+  switch (item.state) {
+    case 'SYNC_FAILED':
+      return `Échec d'envoi : ${errorText(item.error ?? 'http_error')}`;
+    case 'UPLOADED':
+      return ctx.analysed ? null : 'Envoyée — analyse en cours';
+    case 'CAPTURED':
+      if (ctx.sending) return 'Envoi en cours…';
+      return ctx.offline || item.attempts > 0 ? 'En attente de traitement IA' : "Enregistrée sur l'appareil (chiffrée)";
+  }
+}
+
 export function reducer(s: State, a: Action): State {
   switch (a.type) {
     case 'session_started':
       return push({ ...s, session: a.session }, { from: 'bot', kind: 'text', text: 'Session démarrée. Photographiez une page du registre.' });
     case 'say':
       return push(s, { from: a.from, kind: 'text', text: a.text, hint: a.hint });
+    case 'session_restored': {
+      if (s.session) return s; // already restored (effects may run twice)
+      let next: State = { ...s, session: a.session };
+      for (const p of a.pages) next = patchPage({ ...next, order: [...next.order, p.id] }, p.id, () => ({ pageType: p.pageType }));
+      for (const p of a.pages) if (p.replaces) next = patchPage(next, p.replaces, () => ({ superseded: true }));
+      return push(next, { from: 'bot', kind: 'text', text: 'Session reprise. Les pages en attente seront envoyées dès que la connexion le permet.' });
+    }
     case 'page_added': {
       const added = patchPage({ ...s, order: [...s.order, a.pageId] }, a.pageId, () => ({ pageType: a.pageType }));
       return push(a.replaces ? patchPage(added, a.replaces, () => ({ superseded: true })) : added, {
         from: 'user',
         kind: 'text',
-        text: `${a.replaces ? 'Nouvelle photo envoyée' : 'Photo envoyée'} : page ${a.pageType}, ${pageLabel(a.pageType)}`,
-        hint: a.replaces ? 'Elle remplace la photo précédente.' : undefined,
+        text: `${a.replaces ? 'Nouvelle photo enregistrée' : 'Photo enregistrée'} : page ${a.pageType}, ${pageLabel(a.pageType)}`,
+        hint: `Enregistrée sur l'appareil (chiffrée), envoyée dès que la connexion le permet.${a.replaces ? ' Elle remplace la photo précédente.' : ''}`,
       });
     }
     case 'review_loaded':

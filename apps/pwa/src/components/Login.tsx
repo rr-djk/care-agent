@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { api, type Auth } from '../api';
-import { ApiError } from '../errors';
+import { ApiError, DeviceError } from '../errors';
+import { enroll } from '../offline/store';
 import { errorText } from '../state';
 
 export function Login({ onLogin }: { onLogin: (auth: Auth) => void }) {
@@ -14,9 +15,11 @@ export function Login({ onLogin }: { onLogin: (auth: Auth) => void }) {
     setBusy(true);
     setError('');
     try {
-      onLogin(await api.login(userId.trim(), pin));
+      const auth = await api.login(userId.trim(), pin);
+      await enroll(auth, pin); // key from the PIN + encrypted token: the same PIN unlocks the device offline later
+      onLogin(auth);
     } catch (err) {
-      setError(errorText(err instanceof ApiError ? err.code : 'network'));
+      setError(errorText(err instanceof ApiError || err instanceof DeviceError ? err.code : 'network'));
       setBusy(false);
     }
   };

@@ -61,3 +61,12 @@ input, select { width: 100%; padding: 10px; border: 1px solid #c8c8c8; border-ra
 .wide { width: 100%; margin-top: 8px; }
 .chat-input { display: flex; gap: 8px; }
 .chat-input input { flex: 1; }
+
+.badge { font-size: 0.8em; padding: 2px 10px; border-radius: 12px; background: #ffffff30; }
+.badge.off { background: #b3261e; }
+.badge.sync { background: #e0a800; color: #111; }
+.offline-bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 16px; background: #f7f5f0; border-bottom: 1px solid #e0dcd3; font-size: 0.8em; }
+.offline-bar label { display: flex; align-items: center; gap: 6px; }
+.offline-bar input { width: auto; }
+.offline-bar button { padding: 2px 8px; font-size: 1em; }
+.pages li button { margin-top: 2px; padding: 2px 6px; font-size: 1em; }
