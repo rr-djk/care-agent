@@ -91,3 +91,17 @@ input, select { width: 100%; padding: 10px; border: 1px solid #c8c8c8; border-ra
 .camera-hint.ok { background: #075e54; }
 .camera-actions { display: flex; gap: 8px; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); background: #111; }
 .camera-actions > * { flex: 1; }
+
+.link-card .link-buttons { display: grid; gap: 6px; margin-top: 8px; }
+.candidates { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.candidates > li { display: grid; gap: 2px; padding: 6px 8px; border: 1px solid #e0dcd3; border-radius: 8px; font-size: 0.9em; }
+.candidates > li.inconsistent { border-color: #e0a800; background: #fff8e1; }
+.candidates ul { margin: 2px 0 0; padding-left: 18px; color: #667781; }
+.differences ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.differences li { display: grid; gap: 2px; padding-top: 6px; border-top: 1px solid #e9edef; }
+.differences button[aria-pressed='true'] { font-weight: 600; }
+.record .close { justify-self: end; }
+.record .visits { margin: 0; padding-left: 20px; }
+.record .visits li { display: grid; gap: 2px; margin-bottom: 6px; }
+.record .values { list-style: none; padding: 0; font-size: 0.9em; }
+.record .values em { color: #667781; }

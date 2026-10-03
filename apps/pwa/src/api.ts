@@ -1,4 +1,4 @@
-import type { ExtractedField, RecordPage, ReviewQueue, Role, Session } from '@care-agent/schema';
+import type { Difference, ExtractedField, LinkDecision, LinkProposal, LinkResult, PatientRecord, RecordPage, ReviewQueue, Role, Session } from '@care-agent/schema';
 import { ApiError } from './errors';
 import * as fixtures from './fixtures';
 import { netBlocked, setReachable } from './offline/network';
@@ -101,6 +101,28 @@ const live = {
   },
   async confirmPage(pageId: string): Promise<RecordPage> {
     return (await request(`/pages/${pageId}/confirm`, { method: 'POST' })).json();
+  },
+  /** The link question of the session (needs the server: offline, it waits). */
+  async getProposal(sessionId: string): Promise<LinkProposal> {
+    return (await request(`/patients/candidates?session_id=${encodeURIComponent(sessionId)}`)).json();
+  },
+  /** The midwife types or confirms the fiche number / facility; returns the new question. */
+  async setSessionKey(sessionId: string, key: { fiche_number?: string; facility?: string }): Promise<LinkProposal> {
+    return (await request(`/sessions/${sessionId}`, { ...json(key), method: 'PATCH' })).json();
+  },
+  async link(sessionId: string, decision: LinkDecision): Promise<LinkResult> {
+    return (await request(`/sessions/${sessionId}/link`, json(decision))).json();
+  },
+  /** Re-digitization: the midwife's choice per field ("old" = Garder l'ancien, "new" = Prendre le nouveau). */
+  async saveChoices(sessionId: string, choices: { page_id: string; field_id: string; choice: 'old' | 'new' }[]): Promise<Difference[]> {
+    return (await request(`/sessions/${sessionId}/redigitization`, { ...json({ choices }), method: 'PUT' })).json();
+  },
+  /** The phone shows the registered record: REGISTERED -> SYNCED. */
+  async acknowledge(sessionId: string): Promise<void> {
+    await request(`/sessions/${sessionId}/ack`, { method: 'POST' });
+  },
+  async getPatient(id: string): Promise<PatientRecord> {
+    return (await request(`/patients/${encodeURIComponent(id)}`)).json();
   },
 };
 
