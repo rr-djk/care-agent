@@ -10,7 +10,7 @@ Decisions taken since this plan was written: Vite + React for the PWA, Hono for 
 
 | Step | Content | Status |
 | --- | --- | --- |
-| 1 | Scaffold, dataset hash guard, latency probe (GO/NO-GO for Gemma 4 E4B on CPU) | Code done on `feature/step-1-scaffold-latency-gate`; measured with Ollama 0.35.1 + `gemma4:e4b`: strict rule NO-GO (~40 s per zone at best), good reading quality with a row × visit schema. **Waiting for the team's decision** on the adjusted approach (see `docs/runtime-notes.md`) |
+| 1 | Scaffold, dataset hash guard, latency probe (GO/NO-GO for Gemma 4 E4B on CPU) | Code done on `feature/step-1-scaffold-latency-gate`; measured with Ollama 0.35.1 + `gemma4:e4b`: strict rule NO-GO (~40 s per zone at best), good reading quality with a row × visit schema. **Validated: GO with a compact output format** (native API, values only in a fixed order, asynchronous analysis); merged into `main` |
 | 2 | Shared contracts (`packages/schema`), dedupe, 3-way patient split | Not started |
 | 3 | Ground truth from the PDF, minimal eval, automatic zones | Not started |
 | 4 | Page schemas as data: pages 2, 3, 4 | Not started |
@@ -35,7 +35,7 @@ What exists in the repo today (step 1):
 Open items for the team:
 
 - Runtime installed: Ollama 0.35.1, model tag `gemma4:e4b`.
-- The laptop has 15 GB RAM and no discrete GPU: a full 8-page record is estimated at 15–25 minutes of CPU time even with a compact output format. Decide whether this asynchronous speed is acceptable, or whether to measure Gemma 4 E2B.
+- The laptop has 15 GB RAM and no discrete GPU: a full 8-page record is estimated at 15–25 minutes of CPU time with the compact output format. Accepted because analysis is asynchronous (`PENDING_AI` queue, cache by crop hash); the ~40 s per zone estimate is to be confirmed at the start of step 5. Gemma 4 E2B stays as a fallback.
 - Review notes agreed on: calibrate on patients not used for tuning (3-way split), build ground truth early, derive zones from the PDF vector coordinates, add original-image access control and PII guard tasks, and use page-quad + perspective warp before ORB matching.
 
 ## Overview
