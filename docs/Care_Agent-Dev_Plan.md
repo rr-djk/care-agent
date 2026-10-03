@@ -2,6 +2,42 @@
 
 Oct 3, 2026 · @Eric M.
 
+## Build progress (living section — updated as steps are validated)
+
+The phases below describe *what* to build and *who* owns it. Construction is done in 14 ordered steps, one git branch per step (`feature/step-N-name`), merged into `main` only after validation. Conventional Commits in English.
+
+Decisions taken since this plan was written: Vite + React for the PWA, Hono for the server, npm workspaces (pnpm is not installed), SQLite, Strands only for the conversation agent (template + regex fallback), datasets stay **outside** the repo (`DATASETS_DIR`, default `../datasets`, read-only).
+
+| Step | Content | Status |
+| --- | --- | --- |
+| 1 | Scaffold, dataset hash guard, latency probe (GO/NO-GO for Gemma 4 E4B on CPU) | Code done on `feature/step-1-scaffold-latency-gate`; **waiting for the model measurements** (needs Ollama + model installed) before merge |
+| 2 | Shared contracts (`packages/schema`), dedupe, 3-way patient split | Not started |
+| 3 | Ground truth from the PDF, minimal eval, automatic zones | Not started |
+| 4 | Page schemas as data: pages 2, 3, 4 | Not started |
+| 5 | Vertical slice by CLI: crop → model → validated fields with statuses | Not started |
+| 6 | Server: API, SQLite, lifecycle, NDJSON, audit, original-image store | Not started |
+| 7 | PWA shell, chat UI, HTTPS camera | Not started |
+| 8 | Review flow and conversation agent, PII guard | Not started |
+| 9 | Offline: encrypted queue and sync | Not started |
+| 10 | Quality gate (OpenCV.js) and page-quad warp | Not started |
+| 11 | Cover page and patient linking | Not started |
+| 12 | Remaining pages, checkboxes, real form | Not started |
+| 13 | Degraded variants, tuning, calibration | Not started |
+| 14 | Docs, hardening, demo, fallback | Not started |
+
+What exists in the repo today (step 1):
+
+- `apps/pwa`, `apps/server`, `packages/schema`, `tools/eval`: empty workspace stubs.
+- `tools/check-datasets.mjs` (`make check`): verifies every `manifest.json` entry (existence, size, sha256). Result on the real data: 132 of 132 files match; 88 entries share a hash with another entry (the duplicate PNGs).
+- `tools/smoke/` (`make smoke`): crops one zone of specimen page 3 and times an OpenAI-compatible local runtime at several visual token budgets (cold and warm), and checks logprobs and JSON-schema support. **Not yet run against a real model.**
+- `docs/runtime-notes.md`: template to fill with the measurements and the GO/NO-GO decision.
+
+Open items for the team:
+
+- Install the model runtime and pull Gemma 4 E4B-it, then run `MODEL=<tag> RUNTIME_PROC=ollama make smoke` (the exact tag is unverified).
+- The laptop has 15 GB RAM and no discrete GPU: expect slow inference, hence the latency gate and its fallback ladder (fewer/larger crops → budget 560 → cache by crop hash → Gemma 4 E2B).
+- Review notes agreed on: calibrate on patients not used for tuning (3-way split), build ground truth early, derive zones from the PDF vector coordinates, add original-image access control and PII guard tasks, and use page-quad + perspective warp before ORB matching.
+
 ## Overview
 
 We build an offline-first, WhatsApp-style PWA that turns photos of a paper maternal registry into a structured, midwife-verified record with a status and confidence per field. The phone captures, checks and stores pages on its own; a laptop on the local Wi-Fi runs Gemma 4 E4B-it and everything else. No internet, no cloud, no paid services.
