@@ -10,11 +10,11 @@ Decisions taken since this plan was written: Vite + React for the PWA, Hono for 
 
 | Step | Content | Status |
 | --- | --- | --- |
-| 1 | Scaffold, dataset hash guard, latency probe (GO/NO-GO for Gemma 4 E4B on CPU) | Code done on `feature/step-1-scaffold-latency-gate`; measured with Ollama 0.35.1 + `gemma4:e4b`: strict rule NO-GO (~40 s per zone at best), good reading quality with a row × visit schema. **Validated: GO with a compact output format** (native API, values only in a fixed order, asynchronous analysis); merged into `main` |
+| 1 | Scaffold, dataset hash guard, latency probe (GO/NO-GO for Gemma 4 E4B on CPU) | **Merged into `main`**: measured with Ollama 0.35.1 + `gemma4:e4b`: strict rule NO-GO (~40 s per zone at best), good reading quality with a row × visit schema. **Validated: GO with a compact output format** (native API, values only in a fixed order, asynchronous analysis) |
 | 2 | Shared contracts (`packages/schema`), dedupe, 3-way patient split | **Validated, merged into `main`**: zod contracts (statuses, fields, compact zone answer, lifecycle, entities, NDJSON events), `docs/api.md` v0, 80 unique pages, split tune = patients 2, 3, 4, 8 · calibrate = 1, 5, 7 · verify = 6, 9, 10 (seed 20261003) |
 | 3 | Ground truth from the PDF, minimal eval, automatic zones | **Merged into `main`**: ground truth for all 80 pages (6,020 slots, identifiers excluded), zones for pages 2/3/4 (6/13/4 zones, ≤ 24 cells each, previews in `docs/zones-p0*.png`), `make eval` harness (truth = 100 %, empty = 0 % on non-empty slots), labeling guide for the 5 real photos |
 | 4 | Page schemas as data: pages 2, 3, 4 | **Merged into `main`**: `packages/schema/pages/{identification,pregnancy,delivery}.json` (77 / 280 / 34 fields), short zone prompts generated from them (50–121 words), compact answer parser, normalizers and validators (ranges, blood pressure, dates, cross-field rules); all 3,910 ground-truth values of pages 2–4 pass the validators |
-| 5 | Vertical slice by CLI: crop → model → validated fields with statuses | **Merged into `main`**: `npm run analyze` reads a page end to end (masks, crops with row-label strip, ink detection, Gemma 4 on inked cells only, statuses). Page 19: 8/8 then 23/24 cells right, the wrong one flagged `NEEDS_REVIEW`. Ink detector on 80 pages: text recall ≥ 0.997, checkboxes 1.00. No per-token probabilities from Ollama. Baseline accuracy on the tune split: running |
+| 5 | Vertical slice by CLI: crop → model → validated fields with statuses | **Merged into `main`**: `npm run analyze` reads a page end to end (masks, crops with row-label strip, ink detection, Gemma 4 on inked cells only, statuses). Page 19: 8/8 then 23/24 cells right, the wrong one flagged `NEEDS_REVIEW`. Ink detector on 80 pages: text recall ≥ 0.997, checkboxes 1.00. No per-token probabilities from Ollama. Baseline on the tune split (12 pages): 90.8 % of handwritten cells right (identification 92.9 %, pregnancy 89.3 %, delivery 100 %), 100 % of blank cells left blank; a prompt fix for the remaining null answers is being evaluated on `fix/prompt-null-wording` |
 | 6 | Server: API, SQLite, lifecycle, NDJSON, audit, original-image store | **Merged into `main`**: Hono API on SQLite (`make server`), PIN login with midwife/supervisor roles, idempotent upload with SHA-256 re-check, lifecycle persisted before each response, field edits audited, originals AES-256-GCM encrypted with every access logged, NDJSON analysis stream with replay; 25 server tests |
 | 7 | PWA shell, chat UI, HTTPS camera | **Merged into `main`**: Vite + React PWA (`make pwa`), French WhatsApp-style chat, login, capture with page type, upload, live analysis with doubtful fields first, field correction and page confirmation; fixture mode. **Phone test over HTTPS pending** (needs mkcert on the laptop) |
 | 8 | Review flow and conversation agent, PII guard | **Merged into `main`**: review queue with explicit French doubts, Confirmer / Corriger / Reprendre la photo / Laisser illisible, retake (`SUPERSEDED`), ink-only manual entry, deterministic chat parser (optional LLM tool loop behind `CHAT_ENGINE`), PII guard, `docs/security.md`. Live checks with Ollama pending |
@@ -25,18 +25,14 @@ Decisions taken since this plan was written: Vite + React for the PWA, Hono for 
 | 13 | Degraded variants, tuning, calibration | Not started |
 | 14 | Docs, hardening, demo, fallback | Not started |
 
-What exists in the repo today (step 1):
-
-- `apps/pwa`, `apps/server`, `packages/schema`, `tools/eval`: empty workspace stubs.
-- `tools/check-datasets.mjs` (`make check`): verifies every `manifest.json` entry (existence, size, sha256). Result on the real data: 132 of 132 files match; 88 entries share a hash with another entry (the duplicate PNGs).
-- `tools/smoke/` (`make smoke`): crops one zone of specimen page 3 and times an OpenAI-compatible local runtime at several visual token budgets (cold and warm), and checks logprobs and JSON-schema support.
-- `docs/runtime-notes.md`: measurements and GO/NO-GO result. Key facts: use Ollama's native API (`think: false`, JSON schema, logprobs all work); reading an image costs ~22 s, writing ~7 tokens/s; Ollama exposes no visual-token budget.
+What exists today: see the README "How to test" (commands, expected outputs) and `AGENTS.md` (layout, invariants, gotchas). In short, `main` runs end to end on a laptop: capture in the PWA (offline queue included) → upload → crop + ink + Gemma 4 → statuses → conversational review → validated page.
 
 Open items for the team:
 
-- Runtime installed: Ollama 0.35.1, model tag `gemma4:e4b`.
-- The laptop has 15 GB RAM and no discrete GPU: a full 8-page record is estimated at 15–25 minutes of CPU time with the compact output format. Accepted because analysis is asynchronous (`PENDING_AI` queue, cache by crop hash); the ~40 s per zone estimate is to be confirmed at the start of step 5. Gemma 4 E2B stays as a fallback.
-- Review notes agreed on: calibrate on patients not used for tuning (3-way split), build ground truth early, derive zones from the PDF vector coordinates, add original-image access control and PII guard tasks, and use page-quad + perspective warp before ORB matching.
+- Phone test over HTTPS: install mkcert on the laptop, `make certs`, trust the root CA on the phone (README section 6). Not done yet.
+- Prompt fix (`fix/prompt-null-wording`): the baseline showed the model answering null on clearly written zones (glucosuria/albuminuria, 30 of 66 errors); the reworded prompt is being re-evaluated on the tune split before merging.
+- CPU-only laptop (15 GB RAM, no GPU): ~20 s to read a crop, ~7 output tokens/s, a dense page takes several minutes; analysis is asynchronous by design. Gemma 4 E2B stays as a fallback.
+- Questions for the organizers (defaults in the table at the end): server on a laptop vs everything on the phone, "N° de la fiche" as the linking code, test-set pages, Arabic/English pages.
 
 ## Overview
 

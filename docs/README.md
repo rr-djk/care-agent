@@ -1,3 +1,11 @@
 # Docs
 
-`Care_Agent-Dev_Plan.md` is the project plan (overview, stack, principles, steps). `runtime-notes.md` is the template where the step 1 latency gate results (runtime, model tag, capabilities, timings, RAM) and the GO/NO-GO decision rule are recorded.
+- `Care_Agent-Dev_Plan.md` — project plan (overview, stack, principles, phases) and the living **Build progress** table.
+- `runtime-notes.md` — Gemma 4 E4B on Ollama: capabilities (think off, JSON schema, logprobs = first token only), measured latencies on the CPU laptop, GO decision.
+- `api.md` — HTTP API contract of the local server (auth, upload, NDJSON analysis stream, review, chat, originals).
+- `security.md` — prompt-injection stance, PII guard, what is never stored or logged.
+- `offline.md` — offline design (PIN-derived key, encrypted IndexedDB queue, sync rules) and the network-cut test matrix.
+- `labeling.md` — how to hand-label the 5 real photos (template in `tools/eval/data/`).
+- `zones-p02.png`, `zones-p03.png`, `zones-p04.png` — crop zones drawn on specimen pages (identifiers masked).
+
+How to run and test everything: the root `README.md` ("How to test"). Facts and gotchas for contributors and coding agents: `AGENTS.md`.
