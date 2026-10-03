@@ -1,4 +1,4 @@
-.PHONY: check test pages truth schemas eval predict smoke server pwa certs help
+.PHONY: check test pages truth schemas eval predict smoke quality-eval server pwa certs help
 
 help: ## List targets
 	@echo "make check  - dataset guard + typecheck + tests"
@@ -8,6 +8,7 @@ help: ## List targets
 	@echo "make schemas - regenerate packages/schema/pages/*.json (OVERWRITES hand edits)"
 	@echo "make eval   - score predictions against the ground truth, e.g. make eval ARGS='--extractor empty --split verify'"
 	@echo "make predict - run the analyzer on specimen pages and write eval-results/predictions-<ts>.json, e.g. make predict ARGS='--split tune --pages p3 --limit 1'"
+	@echo "make quality-eval - run the image-quality gate on the specimens, the real photos and synthetic degradations (outputs in eval-results/quality/)"
 	@echo "make server - start the API server on PORT (default 8787), data in DATA_DIR (default ./data)"
 	@echo "make pwa    - start the PWA dev server on 0.0.0.0:5173 (HTTPS when data/certs exist), /api proxied to API_URL"
 	@echo "make certs  - mkcert certificate for localhost + this machine's LAN IPs into data/certs (run 'mkcert -install' yourself once)"
@@ -16,12 +17,14 @@ help: ## List targets
 check:
 	node tools/check-datasets.mjs
 	npm run typecheck -w @care-agent/schema
+	npm run typecheck -w @care-agent/quality
 	npm run typecheck -w @care-agent/server
 	npm run typecheck -w @care-agent/pwa
 	$(MAKE) test
 
 test:
 	npm test -w @care-agent/schema
+	npm test -w @care-agent/quality
 	npm test -w @care-agent/server
 	npm test -w @care-agent/pwa
 	node --test tools/
@@ -51,6 +54,9 @@ server:
 
 pwa:
 	npm run dev -w @care-agent/pwa
+
+quality-eval:
+	node --import tsx tools/quality-eval.mjs
 
 # Needs mkcert installed and its root CA set up once by the user (`mkcert -install`); the phone must trust that CA.
 certs:

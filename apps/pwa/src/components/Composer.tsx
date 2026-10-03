@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { cameraAvailable } from '../quality/guide';
 import { PAGE_TYPES } from '../state';
 
 interface Props {
@@ -6,10 +7,11 @@ interface Props {
   canChat: boolean; // a review question is open: free text goes to the chat agent
   onChat: (text: string) => void;
   onNewSession: (fiche: string, facility: string) => void;
-  onCapture: (file: File, pageType: number) => void;
+  onCapture: (pageType: number) => void; // live camera when available, else the file picker
+  onImport: (pageType: number) => void; // file picker (gallery)
 }
 
-export function Composer({ hasSession, canChat, onChat, onNewSession, onCapture }: Props) {
+export function Composer({ hasSession, canChat, onChat, onNewSession, onCapture, onImport }: Props) {
   const [form, setForm] = useState(false);
   const [fiche, setFiche] = useState('');
   const [facility, setFacility] = useState('');
@@ -56,20 +58,12 @@ export function Composer({ hasSession, canChat, onChat, onNewSession, onCapture 
       <div className="actions">
         <button onClick={() => setForm(!form)}>Nouvelle session</button>
         {hasSession && (
-          <label className="button primary">
-            Photographier une page
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              hidden
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                e.target.value = ''; // allow retaking the same file
-                if (file) onCapture(file, pageType);
-              }}
-            />
-          </label>
+          <>
+            <button className="primary" onClick={() => onCapture(pageType)}>
+              Photographier une page
+            </button>
+            {cameraAvailable() && <button onClick={() => onImport(pageType)}>Importer une image</button>}
+          </>
         )}
       </div>
     </footer>

@@ -12,6 +12,10 @@ A midwife can capture pages with no connection. Each page is encrypted on the ph
 - **« Effacer les données de l'appareil »** (header bar and unlock screen) deletes the whole IndexedDB database after a confirmation that counts the unsent pages.
 - Limits: demo-grade like the rest of the auth. A 6-digit PIN is guessable offline by anyone who copies the database (the iteration count only slows that down); the key is not hardware-backed; the service worker and app code are not encrypted.
 
+## Quality check before queueing (step 10)
+
+The on-device quality gate (`docs/quality.md`) runs before `addPage`, entirely on the phone (OpenCV.js is precached by the service worker), so it works with no connection. The verdict (`meta.quality`, and `LOW_QUALITY` in `meta.flags` after « Garder quand même ») is part of the page meta, sealed like the rest and uploaded with the page. The original bytes are still never re-encoded.
+
 ## Store (`store.ts`)
 
 Object stores `profiles`, `sessions`, `pages` (meta), `blobs` (image bytes). At capture: `crypto.randomUUID()` page id, SHA-256 of the **original** bytes (never re-encoded), state `CAPTURED`, attempts 0. Sessions are created on the phone with a client UUID (`POST /api/sessions` accepts it and is idempotent, `docs/api.md`).

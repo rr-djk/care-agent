@@ -6,8 +6,9 @@ No internet, no cloud.
 
 ## Layout
 
-- `apps/pwa` - Vite + React PWA: login, WhatsApp-style chat in French, photo capture, live analysis, field correction
+- `apps/pwa` - Vite + React PWA: login, WhatsApp-style chat in French, photo capture with a live A4 guide and a quality check, live analysis, field correction
 - `apps/server` - Hono API (SQLite, lifecycle, encrypted originals, NDJSON analysis stream) and image analysis: crop, ink detection, Gemma 4 calls, field statuses (`analyze`, `predict`, `ink-eval` commands)
+- `packages/quality` - on-device image quality gate and page-quad warp (OpenCV.js), shared by the PWA worker and the server
 - `packages/schema` - shared zod contracts, page schemas (`pages/*.json`), zone prompts, normalizers and validators
 - `tools/eval` - ground truth from the specimen PDF, crop zones, evaluation harness
 - `tools/check-datasets.mjs` - dataset integrity guard; `tools/smoke/` - latency probe
@@ -17,7 +18,7 @@ Plan and build progress: [docs/Care_Agent-Dev_Plan.md](docs/Care_Agent-Dev_Plan.
 
 ## How to test
 
-What works today: reading registry pages with the local model (command line, section 3), and the app itself: server + PWA in the browser (section 5) or on a phone (section 6). The chat then walks the doubtful fields one by one (Confirmer / Corriger / Reprendre la photo / Laisser illisible, or type the value), and offers manual entry when the model is unavailable. Offline capture with an encrypted queue works too (section 7). Not yet: image-quality check, patient linking.
+What works today: reading registry pages with the local model (command line, section 3), and the app itself: server + PWA in the browser (section 5) or on a phone (section 6). The chat then walks the doubtful fields one by one (Confirmer / Corriger / Reprendre la photo / Laisser illisible, or type the value), and offers manual entry when the model is unavailable. Offline capture with an encrypted queue works too (section 7), and every photo goes through an on-device quality check (section 8). Not yet: patient linking.
 
 ### 1. Prerequisites
 
@@ -43,14 +44,15 @@ npm ci
 make check
 ```
 
-`make check` runs the dataset guard, the typecheck of the three packages and every test suite. Success looks like this (excerpt):
+`make check` runs the dataset guard, the typecheck of the four packages and every test suite. Success looks like this (excerpt):
 
 ```
 entries: 132, ok: 132, mismatches/missing: 0          <- every data file matches manifest.json
 info: 88 entries share an identical sha256 with another entry   <- normal: duplicate PNGs in the dataset
 # pass 34 / # fail 0                                  <- schema tests
-# pass 51 / # fail 0                                  <- server tests
-      Tests  39 passed (39)                           <- PWA tests
+# pass 7 / # fail 0                                   <- quality tests (OpenCV.js, ~10 s)
+# pass 53 / # fail 0                                  <- server tests
+      Tests  45 passed (45)                           <- PWA tests
 # pass 14 / # fail 0                                  <- eval tools tests
 Ran 9 tests ... OK                                    <- Python tests
 ```
@@ -130,7 +132,7 @@ Runs the full pipeline on the first pregnancy page of the `tune` patients and pr
 make eval ARGS='--extractor eval-results/predictions-<time>.json --split tune --pages p3'
 ```
 
-Same table as in section 2, now with real percentages. Look at `non-empty` (handwritten cells read correctly) and `empty` (blank cells correctly left empty, expected 100 %). Reference: the first full run on the 12 `tune` pages (pages 2, 3, 4 of patients 2, 3, 4, 8) gave non-empty 90.8 % (identification 92.9 %, pregnancy 89.3 %, delivery 100 %), empty 100 %. Per-field results are in the JSON (`by_key`).
+Same table as in section 2, now with real percentages. Look at `non-empty` (handwritten cells read correctly) and `empty` (blank cells correctly left empty, expected 100 %). Reference on the 12 `tune` pages (pages 2, 3, 4 of patients 2, 3, 4, 8), current prompt: non-empty **92.2 %** (identification 92.9 %, pregnancy 91.3 %, delivery 100 %), empty 100 % (the first run, before the prompt fix, gave 90.8 %). A full `tune` run takes about 1 hour on the CPU laptop; do not delete or switch the folder it runs from until it prints `wrote .../predictions-<time>.json` (results are only written at the end). Per-field results are in the JSON (`by_key`).
 
 Splits: `tune` (patients 2, 3, 4, 8), `calibrate` (1, 5, 7), `verify` (6, 9, 10). Everything generated stays in `eval-results/` and `data/` (git-ignored).
 
@@ -260,9 +262,54 @@ What proves it works: (a) while offline, the server terminal shows no request an
 
 Design, failure table and the network-cut matrix: [docs/offline.md](docs/offline.md). Tests: `npm test -w @care-agent/pwa`.
 
+### 8. Image quality gate (no model, no Ollama)
+
+Details, thresholds and numbers: [docs/quality.md](docs/quality.md).
+
+**8.1 Evaluation on the specimens, the real photos and synthetic degradations (~1 minute)**
+
+```
+make quality-eval
+```
+
+Output (excerpt):
+
+```
+specimens: 80 pages, OK 80, WARNING 0, REJECT 0
+  blur 2194.3..3758.1  brightness 193..204  glare 0..0  spread 107..138
+...
+1-1.jpg WARNING | Page coupée : reculez pour voir les 4 coins | quad found | warped true
+...
+│ 12      │ 'p3 clean'              │ 'OK'      │ 2805.3 │ ...
+│ 13      │ 'p3 blur s2'            │ 'WARNING' │ 170.1  │ ...
+│ 18      │ 'p3 very dark'          │ 'REJECT'  │ 0      │ ...
+wrote .../eval-results/quality/ (quality-eval.json, warp-1..5.png, synthetic-p3.png)
+```
+
+Success: the first line says `OK 80, WARNING 0, REJECT 0` (a clean render must never be warned), every `clean` and `on table, mild` row is `OK`, every `blur`, `motion`, `dark`, `cropped` row is `WARNING` or `REJECT`, `very dark` is `REJECT`. Failure: a clean specimen listed under `not OK:` (a threshold is too strict), or a blurred/dark/cropped variant that is `OK` (too lax). The five real photos are all `WARNING` « Page coupée » (open booklets cut by the frame): that is expected, not a failure; what matters is `quad found`.
+Look at the files in `eval-results/quality/` (git-ignored, verify: `git check-ignore -v eval-results/quality/warp-1.png`): `warp-N.png` = original with the detected quad in green on the left, the rectified page on the right (a red background = no warp applied); `synthetic-p3.png` = the page 3 variants side by side; `quality-eval.json` = every metric. Photo 1 must come out as a straight A4 page.
+
+**8.2 In the browser (unit tests + the app)**
+
+```
+npm test -w @care-agent/quality     # metrics, quad detection, warp size, gate outcomes, stability: expect "# pass 7", "# fail 0"
+npm test -w @care-agent/server      # incl. LOW_QUALITY -> NEEDS_REVIEW and the rectify counter: expect "# pass 53"
+npm test -w @care-agent/pwa         # incl. guide geometry and quality kept in the encrypted queue: expect "45 passed"
+```
+
+Then the app (`npm run build -w @care-agent/pwa`, `npx vite preview` in `apps/pwa`, and `ANALYZER=ink make server` so no model is called; `localhost` counts as a secure context for the camera):
+
+1. **Nouvelle session**, then **Photographier une page**: the camera screen opens with a white A4 frame. Hold a page (or a photo of one on a screen) inside it: the hint reads « Cadrez la page dans le guide » or the precise problem (« Photo floue … »), the frame turns **green** with « Ne bougez plus… » when everything passes, and the photo is taken by itself about half a second later. **Photographier** takes it by hand.
+2. After the shot, « Analyse de la photo… » flashes, then: OK = the page is queued as usual (nothing extra to do); doubtful = a panel « Photo à vérifier » with the messages and **Reprendre** / **Garder quand même**; hopeless (black, no paper) = « Photo inutilisable » with **Reprendre** only.
+3. **Importer une image** (or the main button when the camera is unavailable: plain HTTP on the LAN, permission denied) goes through the same check. Offline works the same (airplane mode, or the simulation switch): the verdict appears, the page is queued, and it is sent when the connection returns.
+4. After **Garder quand même** and the upload, the page's questions are all « La photo de cette page est de qualité douteuse : j'ai lu « … » pour … » (every field read goes to review).
+
+Success: the green frame appears only on a sharp, well framed page and never on a blurry one; the blurry photo gets « Photo floue : rapprochez-vous et tenez le téléphone immobile »; the server log (`make server`) shows one `warp: n of m analysed pages rectified since start` line per page read (model or `ANALYZER=ink`). Failure: the camera screen black or stuck on « Démarrage de la caméra… » (permission, or no HTTPS off localhost: use the file picker), the check never answering (OpenCV asset not cached: build + preview, not the dev server, for offline), a clean photo refused.
+
 ### Known limits
 
 - CPU only: ~20 s to read a crop plus ~7 output tokens/s; a full 8-page record takes many minutes. Analysis is designed to run in the background.
 - Ollama returns no per-token probabilities for this model, so confidence comes from ink/model agreement and validators.
 - Only pages 2, 3 and 4 have schemas so far (identification, pregnancy, delivery).
 - Offline, only captures are queued; reviewing (corrections, confirmations) needs the server.
+- Quality thresholds are provisional (recalibrated in step 13); an open booklet is detected as one big quad (the spread), the single-page crop is not done yet.

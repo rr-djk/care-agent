@@ -53,6 +53,17 @@ describe('encrypted store', () => {
     expect(dump.includes(Buffer.from(ID))).toBe(true);
   });
 
+  it('keeps the quality result and the LOW_QUALITY flag of a page in its (encrypted) meta', async () => {
+    await enroll({ token: TOKEN, role: 'midwife', userId: 'sf-01' }, '123456');
+    const quality = { outcome: 'WARNING' as const, metrics: { blur: 120, brightness: 180, glare: 0, framing: 0.9 }, messages: ['Photo floue : rapprochez-vous et tenez le téléphone immobile'] };
+    const meta: RecordPage = { id: ID, session_id: SESSION, page_type: 3, captured_at: 't', midwife_id: 'sf-01', sha256: SHA, state: 'CAPTURED', flags: ['LOW_QUALITY'], quality };
+    await addPage('sf-01', meta, SECRET_BYTES, 'image/png');
+    const [page] = await listPages('sf-01');
+    expect(page.meta.flags).toEqual(['LOW_QUALITY']);
+    expect(page.meta.quality).toEqual(quality);
+    expect((await rawDump()).includes(Buffer.from('floue'))).toBe(false); // still sealed at rest
+  });
+
   it('keeps the original bytes exactly, deletes the blob once uploaded but keeps the meta with the server state', async () => {
     await enroll({ token: TOKEN, role: 'midwife', userId: 'sf-01' }, '123456');
     const meta: RecordPage = { id: ID, session_id: SESSION, page_type: 3, captured_at: 't', midwife_id: 'sf-01', sha256: SHA, state: 'CAPTURED', flags: [] };

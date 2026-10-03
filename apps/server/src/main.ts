@@ -15,6 +15,7 @@ import { analyzePage } from './vision/analyze';
 import { defaultDeps, loadCellBoxes } from './cli/pages';
 import { inkOnlyFields } from './vision/manual';
 import { modelConfig } from './vision/model';
+import { rectify } from './vision/rectify';
 
 const dataDir = dataDirFromEnv();
 const db = openDb(dataDir);
@@ -32,13 +33,14 @@ if (pins.length) {
 const mode = process.env.ANALYZER;
 const analyzerOn = mode !== 'off' && mode !== 'ink';
 
-/** Decodes the image and returns the schema + page of a page type, or fails like the analysis does. */
+/** Decodes and rectifies the image and returns the schema + page of a page type, or fails like the analysis does. */
 async function decode(image: Buffer, pageType: number) {
   const schema = pageSchemaFor(pageType);
   const layout = PAGE_LAYOUTS.find((l) => l === schema?.layout);
   if (!schema || !layout) throw new AnalysisError('page_type_unsupported'); // e.g. the cover has no schema yet
   const { data, info } = await sharp(image).removeAlpha().raw().toBuffer({ resolveWithObject: true });
-  return { layout, schema, page: { data, width: info.width, height: info.height } };
+  // rectified in memory before reading; the stored original is never touched
+  return { layout, schema, page: await rectify({ data, width: info.width, height: info.height }) };
 }
 
 const analyzer: Analyzer | undefined = analyzerOn
