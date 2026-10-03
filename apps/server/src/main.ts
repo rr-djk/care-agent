@@ -2,15 +2,18 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { logger } from 'hono/logger';
 import sharp from 'sharp';
-import { LAYOUT, PAGE_LAYOUTS } from '@care-agent/schema';
+import { PAGE_LAYOUTS } from '@care-agent/schema';
 import { createApp } from './app';
+import { openAiCompatModel } from './chat-llm';
 import { seedUsers } from './auth';
 import { dataDirFromEnv, openDb } from './db';
+import { pageSchemaFor } from './fields';
 import { openOriginals } from './originals';
 import { EventStore } from './stream';
 import { createWorker, AnalysisError, type Analyzer } from './worker';
 import { analyzePage } from './vision/analyze';
-import { defaultDeps } from './cli/pages';
+import { defaultDeps, loadCellBoxes } from './cli/pages';
+import { inkOnlyFields } from './vision/manual';
 import { modelConfig } from './vision/model';
 
 const dataDir = dataDirFromEnv();
@@ -25,22 +28,38 @@ if (pins.length) {
 }
 
 // ANALYZER=off skips the analysis (pages stay PENDING_AI): used to try the API without Ollama.
-const analyzerOn = process.env.ANALYZER !== 'off';
+// ANALYZER=ink never calls the model: pages go straight to manual entry (ink-only reading).
+const mode = process.env.ANALYZER;
+const analyzerOn = mode !== 'off' && mode !== 'ink';
+
+/** Decodes the image and returns the schema + page of a page type, or fails like the analysis does. */
+async function decode(image: Buffer, pageType: number) {
+  const schema = pageSchemaFor(pageType);
+  const layout = PAGE_LAYOUTS.find((l) => l === schema?.layout);
+  if (!schema || !layout) throw new AnalysisError('page_type_unsupported'); // e.g. the cover has no schema yet
+  const { data, info } = await sharp(image).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  return { layout, schema, page: { data, width: info.width, height: info.height } };
+}
+
 const analyzer: Analyzer | undefined = analyzerOn
   ? async (image, pageType) => {
-      const layout = PAGE_LAYOUTS.find((l) => l === LAYOUT[pageType as keyof typeof LAYOUT]);
-      if (!layout) throw new AnalysisError('page_type_unsupported'); // e.g. the cover has no schema yet
-      const { data, info } = await sharp(image).removeAlpha().raw().toBuffer({ resolveWithObject: true });
-      const result = await analyzePage({ data, width: info.width, height: info.height }, layout, defaultDeps(layout));
+      const { layout, page } = await decode(image, pageType);
+      const result = await analyzePage(page, layout, defaultDeps(layout));
       return result.fields;
     }
   : undefined;
+const inkAnalyzer: Analyzer = async (image, pageType) => {
+  const { layout, schema, page } = await decode(image, pageType);
+  return inkOnlyFields(page, schema, loadCellBoxes(layout));
+};
 
-const worker = createWorker({ db, originals, events }, analyzer);
+const worker = createWorker({ db, originals, events }, analyzer, inkAnalyzer);
 const root = new Hono();
 root.use(logger()); // method, path (ids only), status: never bodies
-root.route('/', createApp({ db, originals, events, worker, model: analyzerOn ? modelConfig().model : null }));
+// CHAT_ENGINE=strands: LLM chat engine (tool loop on Ollama's /v1); the deterministic parser is the default.
+const chatModel = process.env.CHAT_ENGINE === 'strands' ? openAiCompatModel() : undefined;
+root.route('/', createApp({ db, originals, events, worker, model: analyzerOn ? modelConfig().model : null, inkOnly: mode === 'ink', chatModel }));
 
 const port = Number(process.env.PORT ?? 8787);
-serve({ fetch: root.fetch, port, hostname: '0.0.0.0' }, () => console.log(`care-agent server on :${port} (data: ${dataDir}, analyzer ${analyzerOn ? 'on' : 'off'})`));
+serve({ fetch: root.fetch, port, hostname: '0.0.0.0' }, () => console.log(`care-agent server on :${port} (data: ${dataDir}, analyzer ${mode === 'ink' ? 'ink' : analyzerOn ? 'on' : 'off'})`));
 worker.resume();
