@@ -17,3 +17,15 @@ export function maskIdentifiers(text: string): { text: string; masked: boolean }
   const out = PATTERNS.reduce((t, re) => t.replace(re, MASK), text);
   return { text: out, masked: out !== text };
 }
+
+// Staff names ("Examen fait par", "Vu par") are not stored: only the role survives, else a placeholder.
+export const isStaffField = (fieldId: string) => /(?:^|\.)(?:examen_fait_par|vu_par)(?:\.|$)/.test(fieldId);
+
+export function staffRole(text: string): string {
+  const t = text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  if (!t.trim()) return '';
+  if (/sage[\s-]*femme|\bsf\b/.test(t)) return 'Sage-femme';
+  if (/\bdr\b|docteur|medecin/.test(t)) return 'Médecin';
+  if (/\binf\b|infirmi/.test(t)) return 'Infirmier(e)';
+  return '<staff>';
+}

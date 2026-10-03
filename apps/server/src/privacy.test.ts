@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { maskIdentifiers, MASK } from './privacy';
+import { isStaffField, maskIdentifiers, MASK, staffRole } from './privacy';
 
 test('masks CIN-like tokens, Moroccan phone numbers, emails and street addresses', () => {
   const cases: [string, string][] = [
@@ -39,4 +39,13 @@ test('masks several identifiers in one text and reports masked only when somethi
   const out = maskIdentifiers('AB123456 et 0612345678, mail a@b.co');
   assert.equal(out.text, `${MASK} et ${MASK}, mail ${MASK}`);
   assert.equal(maskIdentifiers('rien à masquer').masked, false);
+});
+
+test('staff names are reduced to the role', () => {
+  assert.ok(isStaffField('p03.examen_fait_par.v1_t1') && isStaffField('p06.vu_par') && !isStaffField('p03.poids_kg.v1_t1'));
+  assert.equal(staffRole('Dr Benjelloun'), 'Médecin');
+  assert.equal(staffRole('Sage-femme Salima'), 'Sage-femme');
+  assert.equal(staffRole('Inf. Zahra'), 'Infirmier(e)');
+  assert.equal(staffRole('Karima'), '<staff>');
+  assert.equal(staffRole(''), '');
 });
