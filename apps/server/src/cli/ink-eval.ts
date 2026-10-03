@@ -1,5 +1,5 @@
 // Evaluates the ink detector against the ground truth (no model): empty vs non-empty text slots, ticked vs unticked
-// checkboxes, per layout, over every page of identification/pregnancy/delivery.
+// checkboxes, per layout, over every page of the layouts that have a schema.
 // Usage: npm run ink-eval -w @care-agent/server
 import { readFileSync } from 'node:fs';
 import { PAGE_LAYOUTS, type PageLayout } from '@care-agent/schema';
