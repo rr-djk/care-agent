@@ -5,6 +5,7 @@ export * from './zone';
 export * from './lifecycle';
 export * from './entities';
 export * from './events';
+export * from './review';
 export * from './pageSchema';
 export * from './prompt';
 export * from './values';

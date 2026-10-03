@@ -35,6 +35,7 @@ const MIGRATIONS = [
   CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, json TEXT NOT NULL);
   CREATE INDEX events_session ON events (session_id, id);
   `,
+  'ALTER TABLE pages ADD COLUMN replaces TEXT;',
 ];
 
 export function openDb(dataDir: string): Db {
@@ -62,6 +63,7 @@ interface PageRow {
   state: RecordPage['state'];
   flags: string;
   quality: string | null;
+  replaces: string | null;
 }
 
 export function getPage(db: Db, id: string): RecordPage | undefined {
@@ -77,6 +79,7 @@ export function getPage(db: Db, id: string): RecordPage | undefined {
     state: r.state,
     flags: JSON.parse(r.flags),
     quality: r.quality ? JSON.parse(r.quality) : undefined,
+    replaces: r.replaces ?? undefined,
   };
 }
 

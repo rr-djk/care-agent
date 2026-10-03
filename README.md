@@ -17,7 +17,7 @@ Plan and build progress: [docs/Care_Agent-Dev_Plan.md](docs/Care_Agent-Dev_Plan.
 
 ## How to test
 
-What works today: reading registry pages with the local model (command line, section 3), and the app itself: server + PWA in the browser (section 5) or on a phone (section 6). Not yet: the conversational review (Confirm/Retake per field), offline queue, image-quality check, patient linking.
+What works today: reading registry pages with the local model (command line, section 3), and the app itself: server + PWA in the browser (section 5) or on a phone (section 6). The chat then walks the doubtful fields one by one (Confirmer / Corriger / Reprendre la photo / Laisser illisible, or type the value), and offers manual entry when the model is unavailable. Not yet: offline queue, image-quality check, patient linking.
 
 ### 1. Prerequisites
 
@@ -81,10 +81,12 @@ make pwa           # PWA on http://localhost:5173 (/api is proxied to the server
 ```
 
 To choose the PINs instead, create `data/users.json` before the first start: `[{ "id": "sf-01", "role": "midwife", "pin": "123456" }]`.
-Open http://localhost:5173, log in as `sf-01`, tap **Nouvelle session**, pick the page type (2, 3 or 4 are analyzed), tap **Photographier une page** and choose a specimen PNG (e.g. `../datasets/data/Paper Registry/dossiers_specimen_10_patientes-19.png`, page type 3). Expected: "Photo envoyée", "Page reçue, analyse en cours…", then after a few minutes a page summary with the fields to check first; **Corriger** edits a field, **Confirmer la page** is refused while a field is still to check.
+Open http://localhost:5173, log in as `sf-01`, tap **Nouvelle session**, pick the page type (2, 3 or 4 are analyzed), tap **Photographier une page** and choose a specimen PNG (e.g. `../datasets/data/Paper Registry/dossiers_specimen_10_patientes-19.png`, page type 3). Expected: "Photo envoyée", "Page reçue, analyse en cours…", then after a few minutes a page summary and the first question (« J'ai lu « … » pour …, mais la valeur semble inhabituelle. Pouvez-vous vérifier ? ») with **Confirmer / Corriger / Reprendre la photo / Laisser illisible**; answer with the buttons or type the value (e.g. `158`, `12/04/2026`, `120/80`, `neg`, `c'est bon`), then the bot asks the next field, and « Tout est vérifié pour la page 3. » + **Confirmer la page** at the end. **Reprendre la photo** uploads a new photo that replaces the page.
 
 - No model at hand? `ANALYZER=off make server`: upload works, analysis never starts.
-- UI only, no server: `VITE_FIXTURES=1 make pwa` replays a canned analysis.
+- No model, but you still want to read pages: `ANALYZER=ink make server` (manual entry: you type the cells that have writing); with the model on, a page whose analysis fails offers **Saisie manuelle**.
+- UI only, no server: `VITE_FIXTURES=1 make pwa` replays a canned flow (a doubt, an illegible field, a failed page with manual entry, a retake).
+- Optional LLM chat: `CHAT_ENGINE=strands make server` (see `docs/security.md`).
 
 ### 6. On a phone (same Wi-Fi as the laptop)
 

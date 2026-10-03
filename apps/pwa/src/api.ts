@@ -1,8 +1,13 @@
-import type { ExtractedField, RecordPage, Role, Session } from '@care-agent/schema';
+import type { ExtractedField, RecordPage, ReviewQueue, Role, Session } from '@care-agent/schema';
 import { ApiError } from './errors';
 import * as fixtures from './fixtures';
 
 const STORAGE_KEY = 'care-agent.auth';
+
+/** PATCH body: confirm the read value, correct it, or keep it illegible. */
+export type FieldEdit = { confirm: true } | { value: string | boolean | null } | { status: 'ILLEGIBLE' };
+/** The updated field; `text_fr` says what the agent did not accept (failed rule, masked identifier). */
+export type FieldResult = ExtractedField & { text_fr?: string };
 
 export interface Auth {
   token: string;
@@ -62,9 +67,20 @@ const live = {
   async openAnalysis(sessionId: string, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> {
     return (await request(`/sessions/${sessionId}/analysis`, { signal })).body!;
   },
-  async patchField(pageId: string, fieldId: string, value: string | boolean | null): Promise<ExtractedField> {
-    const init = { ...json({ value }), method: 'PATCH' };
+  async patchField(pageId: string, fieldId: string, edit: FieldEdit): Promise<FieldResult> {
+    const init = { ...json(edit), method: 'PATCH' };
     return (await request(`/pages/${pageId}/fields/${encodeURIComponent(fieldId)}`, init)).json();
+  },
+  async getReview(sessionId: string): Promise<ReviewQueue> {
+    return (await request(`/sessions/${sessionId}/review`)).json();
+  },
+  /** Switches a failed page to manual entry; the page_read event follows on the analysis stream. */
+  async startManual(pageId: string): Promise<void> {
+    await request(`/pages/${pageId}/manual`, { method: 'POST' });
+  },
+  /** NDJSON chat stream (token, ping, done, error) about the current review item. */
+  async chat(body: { session_id: string; page_id?: string; field_id?: string; message: string }): Promise<ReadableStream<Uint8Array>> {
+    return (await request('/chat', json(body))).body!;
   },
   async confirmPage(pageId: string): Promise<RecordPage> {
     return (await request(`/pages/${pageId}/confirm`, { method: 'POST' })).json();
