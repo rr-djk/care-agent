@@ -18,6 +18,7 @@ import { cropZone } from './crop';
 import { cellHasInk, checkboxInkRatio, inkRatio, type PageImage } from './ink';
 import type { ModelFn, ModelTimings } from './model';
 import { SequentialQueue } from './queue';
+import { maskIdentifiers } from '../privacy';
 
 export interface CellBox {
   kind: 'text' | 'checkbox';
@@ -79,7 +80,7 @@ export function isApplicable(field: FieldDef, values: Record<string, Normalized>
 }
 
 /** Normalization keeps a reading that does not fit the field type as a string: that is a failure too. */
-function fitsType(field: FieldDef, v: Normalized): boolean {
+export function fitsType(field: FieldDef, v: Normalized): boolean {
   if (v === null) return true;
   if (field.type === 'number') return typeof v === 'number';
   if (field.type === 'date') return typeof v === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(v);
@@ -166,7 +167,9 @@ export async function analyzeZone(
     // pass 1: readings and validation; pass 2: statuses (applicability may depend on a cell of this zone)
     const read = fields.map((f) => {
       const checkbox = f.type === 'checkbox';
-      const verbatim = checkbox ? null : answer.get(f.id) ?? '';
+      // free text may hold an identifier the model read off the page: masked before anything is stored
+      const raw = checkbox ? null : answer.get(f.id) ?? '';
+      const verbatim = raw !== null && (f.type === 'short_text' || f.type === 'free_text') ? maskIdentifiers(raw).text : raw;
       const value = checkbox ? hasInk(f) : normalizeValue(f, verbatim);
       const failed = validateField(f, value);
       if (!failed.length && !fitsType(f, value)) failed.push(`type:${f.type}`);
@@ -203,7 +206,7 @@ export interface PageAnalysis {
 
 const queue = new SequentialQueue(); // one model call at a time, across pages too
 
-function toExtractedField(c: CellResult, sourcePage: number, evidence?: string): ExtractedField {
+export function toExtractedField(c: CellResult, sourcePage: number, evidence?: string): ExtractedField {
   return {
     field_id: c.field_id,
     value: typeof c.value === 'number' ? String(c.value) : c.value,
