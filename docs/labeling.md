@@ -28,3 +28,11 @@ The five JPGs (`1-1` to `1-5`, in the datasets directory) are the only real-form
 ## What never goes in the file
 
 No identifiers, ever: the woman's name, CIN, address, telephone, husband's name and husband's profession. They have no field in the template. They are visible on `1-2` (CIN, address) and written on `1-1` next to the title ("CM: …", not a form field): do not transcribe them, do not add a field for them, do not put them in a comment. `make check` fails if an identifier pattern is found in the committed ground truth and zones; check the labels file by eye before committing it.
+
+## Status (step 12)
+
+`tools/eval/data/real_photos_labels.json` holds labels for `1-1.jpg` (21 fields) and `1-4.jpg` (104 fields) only. **They were written by the build assistant from the images, not by a human: a human must verify them before any score is trusted.** `"?"` marks what is not reliably readable (61 of the 104 fields of `1-4`: the handwriting sits between the printed rows, so the row of a value is often a guess); `""` marks a cell that is visibly empty. The fiche number is labelled as the field value only; the handwritten "CM: …" next to the title and the woman's name are not transcribed. `1-2`, `1-3` and `1-5` are not labelled.
+
+## Why the spreads are not templated
+
+`1-2` to `1-5` are open booklet spreads: two pages in one photo, photographed at an angle, with the next page cut at the edge. Rectification (`vision/rectify.ts`) finds the quadrilateral of one A4 sheet; on a spread it finds the whole spread or one half with a curved spine, so a fixed zone template cannot be placed. Extracting one page out of a spread (split at the spine, flatten the curl, then template) is not done. Only the cover `1-1`, a single sheet, has a template (`real_cover`, `tools/eval/data/zones/real_cover.json`, `packages/schema/pages/real_cover.json`): its zones are hand-drawn on the photo after the warp to 1654 × 2339 px.

@@ -29,6 +29,8 @@ Applied server-side to: every `short_text` / `free_text` value coming from the m
 
 Known limit: the model answer cache (`data/cache/`, local and git-ignored) keeps the raw model response, before the guard.
 
+Staff names: the fields « Examen fait par » and « Vu par » (`isStaffField`) never keep a name. Whether read by the model or typed by the midwife, the value is reduced to the role (`Sage-femme`, `Médecin`, `Infirmier(e)`) or to `<staff>` (`staffRole`).
+
 ## Identifiers and patient linking (step 11)
 
 **What is stored about a woman.** A patient is `patients(id, fiche_number, facility, created_at)`: a generated id, the « N° de la fiche » and the facility. Neither is a direct identifier (a fiche number is a registry sequence like `2026-711-003`; the facility is a place of care). No column anywhere holds a woman's name, her husband's name or job, a CIN, a phone number or an address. A test lists the columns of every table (words `name`, `nom`, `husband`, `cin`, `phone`, `tel`, `address`…) and scans the stored text with the PII guard; the schema test already forbids such a field in the page schemas.

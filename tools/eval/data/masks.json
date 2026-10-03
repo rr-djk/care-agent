@@ -48,6 +48,13 @@
    0.1104
   ]
  ],
- "postpartum_mother": [],
+ "postpartum_mother": [
+  [
+   0.0586,
+   0.0513,
+   0.24,
+   0.0743
+  ]
+ ],
  "postpartum_newborn": []
 }

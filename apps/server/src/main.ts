@@ -37,7 +37,7 @@ const analyzerOn = mode !== 'off' && mode !== 'ink';
 async function decode(image: Buffer, pageType: number) {
   const schema = pageSchemaFor(pageType);
   const layout = PAGE_LAYOUTS.find((l) => l === schema?.layout);
-  if (!schema || !layout) throw new AnalysisError('page_type_unsupported'); // e.g. pages 5 to 8 have no schema yet
+  if (!schema || !layout) throw new AnalysisError('page_type_unsupported'); // a page type outside 1 to 8
   const { data, info } = await sharp(image).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   // rectified in memory before reading; the stored original is never touched
   return { layout, schema, page: await rectify({ data, width: info.width, height: info.height }) };
@@ -47,12 +47,12 @@ const analyzer: Analyzer | undefined = analyzerOn
   ? async (image, pageType) => {
       const { layout, page } = await decode(image, pageType);
       const result = await analyzePage(page, layout, defaultDeps(layout));
-      return result.fields;
+      return result.fields.map((f) => ({ ...f, source_page: pageType })); // pages 7 and 8 share the layout of 5 and 6
     }
   : undefined;
 const inkAnalyzer: Analyzer = async (image, pageType) => {
   const { layout, schema, page } = await decode(image, pageType);
-  return inkOnlyFields(page, schema, loadCellBoxes(layout));
+  return inkOnlyFields(page, schema, loadCellBoxes(layout)).map((f) => ({ ...f, source_page: pageType }));
 };
 
 const worker = createWorker({ db, originals, events }, analyzer, inkAnalyzer);

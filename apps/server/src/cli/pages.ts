@@ -2,11 +2,12 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import sharp from 'sharp';
-import { PAGE_LAYOUTS, type PageLayout } from '@care-agent/schema';
+import { PAGE_LAYOUTS, REAL_LAYOUTS, type PageLayout } from '@care-agent/schema';
 import type { AnalyzeDeps, CellBox } from '../vision/analyze';
 import { fileCache } from '../vision/cache';
 import type { PageImage } from '../vision/ink';
 import { modelConfig, ollamaModel } from '../vision/model';
+import { rectify } from '../vision/rectify';
 
 export const repoRoot = resolve(import.meta.dirname, '../../../..');
 const datasetsDir = () => resolve(repoRoot, process.env.DATASETS_DIR ?? '../datasets');
@@ -40,6 +41,12 @@ export function loadCellBoxes(layout: PageLayout): Map<string, CellBox> {
 export async function loadPageImage(path: string): Promise<PageImage> {
   const { data, info } = await sharp(path).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   return { data, width: info.width, height: info.height };
+}
+
+/** The image a layout is read on: photos of the real form are warped to the template size first, like the server does. */
+export async function loadLayoutImage(path: string, layout: PageLayout): Promise<PageImage> {
+  const page = await loadPageImage(path);
+  return (REAL_LAYOUTS as readonly string[]).includes(layout) ? rectify(page) : page;
 }
 
 /** Ollama model, file cache under data/cache and the cell boxes of the layout. */

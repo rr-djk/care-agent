@@ -18,7 +18,7 @@ import { cropZone } from './crop';
 import { cellHasInk, checkboxInkRatio, inkRatio, type PageImage } from './ink';
 import type { ModelFn, ModelTimings } from './model';
 import { SequentialQueue } from './queue';
-import { maskIdentifiers } from '../privacy';
+import { isStaffField, maskIdentifiers, staffRole } from '../privacy';
 
 export interface CellBox {
   kind: 'text' | 'checkbox';
@@ -172,7 +172,7 @@ export async function analyzeZone(
       const checkbox = f.type === 'checkbox';
       // free text may hold an identifier the model read off the page: masked before anything is stored
       const raw = checkbox ? null : answer.get(f.id) ?? '';
-      const verbatim = raw !== null && (f.type === 'short_text' || f.type === 'free_text') ? maskIdentifiers(raw).text : raw;
+      const verbatim = raw === null ? raw : isStaffField(f.id) ? staffRole(raw) : f.type === 'short_text' || f.type === 'free_text' ? maskIdentifiers(raw).text : raw;
       const value = checkbox ? hasInk(f) : normalizeValue(f, verbatim);
       const failed = validateField(f, value);
       if (!failed.length && !fitsType(f, value)) failed.push(`type:${f.type}`);

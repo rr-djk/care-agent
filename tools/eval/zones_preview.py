@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
-LAYOUTS = ["cover", "identification", "pregnancy", "delivery"]
+LAYOUTS = ["cover", "identification", "pregnancy", "delivery", "postpartum_mother", "postpartum_newborn"]
 
 
 def main():

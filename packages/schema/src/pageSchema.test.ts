@@ -63,3 +63,33 @@ test('page 3 visit columns 2 and 3 carry the row-label strip, column 1 does not'
     assert.equal(z.label_strip !== undefined, !z.id.endsWith('c1'), z.id);
   }
 });
+
+test('postpartum layouts serve page types 5/7 and 6/8, which share their field ids', () => {
+  assert.deepEqual(loadPageSchema('postpartum_mother').page_types, [5, 7]);
+  assert.deepEqual(loadPageSchema('postpartum_newborn').page_types, [6, 8]);
+  // the header of page 7 prints other options than page 5: both sets are cells of the layout
+  const ids = loadPageSchema('postpartum_mother').fields.map((f) => f.id);
+  assert.ok(ids.includes('p05.entre_le_7eme_et_8eme_jour_apres_l_accouchement') && ids.includes('p05.entre_le_40eme_et_50eme_jour_apres_l_accouchement'));
+  for (const l of ['postpartum_mother', 'postpartum_newborn'] as const) {
+    assert.ok(gt && Object.values(gt).filter((p) => p.layout === l).length === 20, `${l}: 10 patients x 2 pages`);
+  }
+});
+
+test('the mother header with the woman name is a mask and no cell', () => {
+  const s = loadPageSchema('postpartum_mother');
+  assert.equal(s.masks.length, 1);
+  assert.ok(s.masks[0][1] < 0.075 && s.masks[0][3] < 0.08, 'mask sits on the "MÈRE — <name>" line above the first cell');
+  assert.ok(s.zones.every((z) => z.bbox_frac[1] >= 0.065));
+});
+
+test('real_cover (real registry, step 12): loads, no identifier field, no ground truth', () => {
+  const s = loadPageSchema('real_cover');
+  assert.deepEqual(s.page_types, [1]);
+  assert.equal(s.fields.length, 21);
+  const cells = s.zones.flatMap((z) => z.cells);
+  assert.deepEqual([...cells].sort(), s.fields.map((f) => f.id).sort());
+  for (const f of s.fields) {
+    const w = [...words(f.id.replace(/nom_de_l_etablissement_sanitaire$/, '')), ...words(f.label_fr.replace(/^Nom de l'établissement sanitaire$/, '')), ...words(f.label_en)];
+    assert.deepEqual(w.filter((x) => FORBIDDEN.includes(x)), [], f.id);
+  }
+});

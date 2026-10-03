@@ -29,6 +29,14 @@ test('numbers: decimal comma, unit suffix stripped, foreign suffix kept as text'
   assert.equal(normalizeValue(f('number', { unit: 'kg' }), '58 cm'), '58 cm');
 });
 
+test('a missing degree sign does not change the unit', () => {
+  const t = f('number', { unit: '°C' });
+  assert.equal(normalizeValue(t, '37.1 °C'), 37.1);
+  assert.equal(normalizeValue(t, '36,8 C'), 36.8);
+  assert.equal(normalizeValue(t, '37.2'), 37.2);
+  assert.equal(normalizeValue(t, '37 F'), '37 F');
+});
+
 test('empty, null and dashes are null; checkboxes are booleans', () => {
   assert.equal(normalizeValue(f('number'), ''), null);
   assert.equal(normalizeValue(f('short_text'), null), null);
@@ -114,4 +122,51 @@ test('all specimen ground-truth values of pages 2, 3, 4 (10 patients): validator
   console.log(`GT validation: ${values} values, ${failed.length} failures`, byRule);
   for (const x of failed) console.log(`  page ${x.page} ${x.id} = "${x.verbatim}" -> ${x.rule}`);
   assert.deepEqual(failed, []);
+});
+
+// Postpartum pages (steps 12): plausibility ranges and applicability, pages 7 and 8 share the fields of 5 and 6.
+const postpartum = (layout: 'postpartum_mother' | 'postpartum_newborn', id: string) => {
+  const field = loadPageSchema(layout).fields.find((x) => x.id === id)!;
+  return (reading: string) => validateField(field, normalizeValue(field, reading));
+};
+
+test('postpartum mother: temperature, pulse, weight, blood pressure, date', () => {
+  const temp = postpartum('postpartum_mother', 'p05.t_deg');
+  assert.deepEqual(temp('37.2'), []);
+  assert.deepEqual(temp('33'), ['range:34:42']);
+  assert.deepEqual(temp('372'), ['range:34:42']);
+  const pulse = postpartum('postpartum_mother', 'p05.pouls');
+  assert.deepEqual([pulse('83'), pulse('40'), pulse('180')], [[], [], []]);
+  assert.deepEqual([pulse('39'), pulse('181')], [['range:40:180'], ['range:40:180']]);
+  const weight = postpartum('postpartum_mother', 'p05.poids');
+  assert.deepEqual(weight('66 kg'), []);
+  assert.deepEqual(weight('6 kg'), ['range:30:200']);
+  assert.deepEqual(weight('66 g'), ['range:30:200']); // wrong unit stays text, the range rejects it
+  assert.deepEqual(postpartum('postpartum_mother', 'p05.ta')('110/71'), []);
+  assert.deepEqual(postpartum('postpartum_mother', 'p05.ta')('11/71'), ['bp']);
+  assert.deepEqual(postpartum('postpartum_mother', 'p05.prochain_rendez_vous_le')('31/02/2026'), ['date']);
+});
+
+test('postpartum newborn: age in days, temperature, weight in g, height, head circumference', () => {
+  const age = postpartum('postpartum_newborn', 'p06.age');
+  assert.deepEqual([age('7 jours'), age('43 jours')], [[], []]);
+  assert.deepEqual(age('120 jours'), ['range:0:90']);
+  assert.deepEqual(postpartum('postpartum_newborn', 'p06.temperature')('36.8 C'), []);
+  assert.deepEqual(postpartum('postpartum_newborn', 'p06.temperature')('3.7'), ['range:34:42']);
+  const weight = postpartum('postpartum_newborn', 'p06.poids');
+  assert.deepEqual(weight('3485 g'), []);
+  assert.deepEqual(weight('3.5 g'), ['range:400:8000']);
+  assert.deepEqual(weight('9000 g'), ['range:400:8000']);
+  assert.deepEqual(postpartum('postpartum_newborn', 'p06.taille')('48 cm'), []);
+  assert.deepEqual(postpartum('postpartum_newborn', 'p06.perimetre_cranien')('34 cm'), []);
+  assert.deepEqual(postpartum('postpartum_newborn', 'p06.perimetre_cranien')('60 cm'), ['range:20:45']);
+});
+
+test('postpartum applicability rules', () => {
+  const rule = (layout: 'postpartum_mother' | 'postpartum_newborn', id: string) =>
+    loadPageSchema(layout).fields.find((x) => x.id === id)?.applicability;
+  assert.equal(rule('postpartum_mother', 'p05.etat_de_la_cicatrice_text'), 'p05.cesarienne = true');
+  assert.equal(rule('postpartum_mother', 'p05.autre_a_preciser'), 'p05.desire_utiliser_une_methode = true');
+  assert.equal(rule('postpartum_mother', 'p05.si_la_mere_ne_desire_pas_une_methode_contraceptive_pourquoi_text'), 'p05.desire_utiliser_une_methode = false');
+  assert.equal(rule('postpartum_newborn', 'p06.preciser_l_etablissement_de_reference'), 'p06.transfert = true');
 });

@@ -1,13 +1,14 @@
 // Usage: npm run analyze -w @care-agent/server -- <page.png | page_no> [--layout L] [--zones id1,id2] [--json out.json] [--save-crops dir]
 // --save-crops writes, per zone sent to the model: <zone>.png (the crop), <zone>.prompt.txt and <zone>.answer.json.
+// A photo of the real form (--layout real_cover) is warped to the template size first (vision/rectify.ts).
 // A relative dir lands under <repo>/data/crops/ (git-ignored), so debug images never end up in a commit.
 import { mkdir, writeFile } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { PAGE_LAYOUTS, type PageLayout } from '@care-agent/schema';
+import { PAGE_LAYOUTS, REAL_LAYOUTS, type PageLayout } from '@care-agent/schema';
 import { analyzePage } from '../vision/analyze';
 import { ModelError } from '../vision/model';
-import { defaultDeps, loadPageImage, pageLayout, pagePngPath, repoRoot } from './pages';
+import { defaultDeps, loadLayoutImage, pageLayout, pagePngPath, repoRoot } from './pages';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -20,8 +21,8 @@ if (!target) {
 }
 const pageNo = /^\d+$/.test(target) ? Number(target) : undefined;
 const layout = (values.layout ?? (pageNo !== undefined ? pageLayout(pageNo) : undefined)) as PageLayout | undefined;
-if (!layout || !PAGE_LAYOUTS.includes(layout)) {
-  console.error(`--layout ${PAGE_LAYOUTS.join('|')} is required (page_no ${pageNo ?? '-'} has no known layout)`);
+if (!layout || ![...PAGE_LAYOUTS, ...REAL_LAYOUTS].includes(layout)) {
+  console.error(`--layout ${[...PAGE_LAYOUTS, ...REAL_LAYOUTS].join('|')} is required (page_no ${pageNo ?? '-'} has no known layout)`);
   process.exit(1);
 }
 
@@ -29,7 +30,7 @@ const pad = (v: unknown, n: number) => String(v ?? '-').slice(0, n).padEnd(n);
 const f = (n: number, d = 1) => n.toFixed(d);
 let totals = { prefill: 0, gen: 0, tokens: 0, wall: 0, skipped: 0, hits: 0 };
 try {
-  const page = await loadPageImage(pageNo !== undefined ? pagePngPath(pageNo) : resolve(target));
+  const page = await loadLayoutImage(pageNo !== undefined ? pagePngPath(pageNo) : resolve(target), layout);
   console.log(`${pad('zone', 18)} ${pad('field', 44)} ${pad('verbatim', 22)} ${pad('status', 14)} ${pad('ink', 6)}`);
   const deps = defaultDeps(layout);
   const save = values['save-crops'];

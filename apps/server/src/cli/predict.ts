@@ -1,4 +1,4 @@
-// Usage: npm run predict -w @care-agent/server -- [--split tune|calibrate|verify|all] [--pages p1,p2,p3,p4] [--limit N]
+// Usage: npm run predict -w @care-agent/server -- [--split tune|calibrate|verify|all] [--pages p1,p2,p3,p4,p5,p6,p7,p8] [--limit N]
 // Writes eval-results/predictions-<ts>.json ({page_no: {key: verbatim | true/false for checkboxes}}) for `make eval`.
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
@@ -7,7 +7,7 @@ import { analyzePage } from '../vision/analyze';
 import { defaultDeps, loadPageImage, pageEntries, pageLayout, pagePngPath, repoRoot } from './pages';
 
 const { values } = parseArgs({
-  options: { split: { type: 'string', default: 'all' }, pages: { type: 'string', default: 'p1,p2,p3,p4' }, limit: { type: 'string' } },
+  options: { split: { type: 'string', default: 'all' }, pages: { type: 'string', default: 'p1,p2,p3,p4,p5,p6,p7,p8' }, limit: { type: 'string' } },
 });
 const gt = JSON.parse(await readFile(`${repoRoot}/tools/eval/data/ground_truth.json`, 'utf8'));
 const split = JSON.parse(await readFile(`${repoRoot}/tools/eval/data/split.json`, 'utf8'));

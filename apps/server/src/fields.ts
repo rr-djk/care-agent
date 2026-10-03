@@ -3,7 +3,7 @@ import { loadPageSchema } from '@care-agent/schema/node';
 import type { AuthUser } from './auth';
 import type { Db } from './db';
 import { ApiError } from './errors';
-import { maskIdentifiers } from './privacy';
+import { isStaffField, maskIdentifiers, staffRole } from './privacy';
 import { CORRECTED, LEFT_ILLEGIBLE } from './review';
 import { fitsType } from './vision/analyze';
 
@@ -15,7 +15,7 @@ export type FieldEdit = { confirm: true } | { value: string | boolean | null; st
 /** The updated field; `text_fr` says in French what the agent did not accept or changed (masked identifier, failed rule). */
 export type EditResult = ExtractedField & { text_fr?: string };
 
-/** Page schema of a stored page; undefined for page types without one (pages 5 to 8 have no schema yet). */
+/** Page schema of a stored page; undefined for page types without one (every page type 1 to 8 has one since step 12). */
 export function pageSchemaFor(pageType?: number): PageSchema | undefined {
   const layout = PAGE_LAYOUTS.find((l) => l === LAYOUT[pageType as keyof typeof LAYOUT]);
   return layout ? loadPageSchema(layout) : undefined;
@@ -71,7 +71,7 @@ export function applyFieldEdit(db: Db, user: AuthUser, page: RecordPage, fieldId
     if (typeof value === 'string') {
       const m = maskIdentifiers(value);
       if (m.masked) notes.push('Un identifiant personnel a été masqué.');
-      value = m.text;
+      value = isStaffField(fieldId) ? staffRole(m.text) : m.text;
     }
     if (edit.status === 'ILLEGIBLE') {
       updated = { ...base, value: null, status: 'ILLEGIBLE', reason: LEFT_ILLEGIBLE }; // explicit: stays illegible

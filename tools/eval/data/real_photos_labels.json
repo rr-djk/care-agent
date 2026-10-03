@@ -1,0 +1,766 @@
+{
+ "readme": "Fill each value: text as written (spaces and accents are free, see docs/labeling.md), \"\" = cell visibly empty, \"?\" = present but unreadable or cut off, \"<staff>\" for any staff name; checkboxes true / false. null = not labeled yet. Never add identifiers.",
+ "provenance": "Labelled by the build assistant (an AI) from the images, NOT by a human: to be verified by a human before any score is trusted. Only 1-1.jpg and 1-4.jpg are labelled; only what is reliably readable (\"?\" = present but not reliably readable, \"\" = visibly empty). The handwriting on 1-4 is written between the printed rows, so most rows of that table are \"?\". No identifier is transcribed.",
+ "photos": {
+  "1-1.jpg": {
+   "shows": "cover (specimen page type 1). The woman's name field is covered by paper: do not label it. The 'CM: ...' note near the title is not a form field.",
+   "fields": [
+    {
+     "key": "p01.n_deg_de_la_fiche",
+     "label": "N° de la fiche",
+     "kind": "text",
+     "value": "A64125"
+    },
+    {
+     "key": "p01.region",
+     "label": "Région",
+     "kind": "text",
+     "value": "Casa-Settat"
+    },
+    {
+     "key": "p01.province",
+     "label": "Province",
+     "kind": "text",
+     "value": "El Jadida"
+    },
+    {
+     "key": "p01.nom_de_l_etablissement_sanitaire",
+     "label": "Nom de l'établissement sanitaire",
+     "kind": "text",
+     "value": "C/S Sidi Smail"
+    },
+    {
+     "key": "p01.dr",
+     "label": "DR",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p01.csc",
+     "label": "CSC",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p01.csu",
+     "label": "CSU",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p01.csca",
+     "label": "CSCA",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p01.csua",
+     "label": "CSUA",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p01.fixe",
+     "label": "Fixe",
+     "kind": "checkbox",
+     "value": true
+    },
+    {
+     "key": "p01.mobile",
+     "label": "Mobile",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p01.grossesse_classee_a_risque",
+     "label": "Grossesse classée à risque",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p01.anemie",
+     "label": "Anémie",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p01.h_t_a",
+     "label": "H.T.A",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p01.diabete",
+     "label": "Diabète",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p01.cardiopathie",
+     "label": "Cardiopathie",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p01.metrorragie",
+     "label": "Métrorragie",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p01.infection",
+     "label": "Infection",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p01.pre_eclampsie",
+     "label": "Pré-éclampsie",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p01.eclampsie",
+     "label": "Eclampsie",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p01.autres_a_preciser",
+     "label": "Autres à préciser",
+     "kind": "text",
+     "value": ""
+    }
+   ]
+  },
+  "1-4.jpg": {
+   "shows": "pregnancy page, left half: header and 1st trimester visits 1-3 (specimen page type 3). The page is photographed at an angle; right columns are cut. Rows that are blank in the photo: value \"\".",
+   "fields": [
+    {
+     "key": "p03.ddr",
+     "label": "DDR",
+     "kind": "text",
+     "value": "19/05/2025"
+    },
+    {
+     "key": "p03.taille",
+     "label": "Taille",
+     "kind": "text",
+     "value": ""
+    },
+    {
+     "key": "p03.groupage_a",
+     "label": "Groupage A",
+     "kind": "checkbox",
+     "value": true
+    },
+    {
+     "key": "p03.groupage_b",
+     "label": "Groupage B",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p03.groupage_o",
+     "label": "Groupage O",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p03.groupage_ab",
+     "label": "Groupage AB",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p03.rh_minus",
+     "label": "Rhésus (-)",
+     "kind": "checkbox",
+     "value": false
+    },
+    {
+     "key": "p03.rh_plus",
+     "label": "Rhésus (+)",
+     "kind": "checkbox",
+     "value": true
+    },
+    {
+     "key": "p03.rendez_vous.v1_t1",
+     "label": "Rendez-vous / Visite 1",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.rendez_vous.v2_t1",
+     "label": "Rendez-vous / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.rendez_vous.v3_t1",
+     "label": "Rendez-vous / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.venue_le.v1_t1",
+     "label": "Venue le / Visite 1",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.venue_le.v2_t1",
+     "label": "Venue le / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.venue_le.v3_t1",
+     "label": "Venue le / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.visites_de_relance.v1_t1",
+     "label": "Visites de relance / Visite 1",
+     "kind": "text",
+     "value": ""
+    },
+    {
+     "key": "p03.visites_de_relance.v2_t1",
+     "label": "Visites de relance / Visite 2",
+     "kind": "text",
+     "value": ""
+    },
+    {
+     "key": "p03.visites_de_relance.v3_t1",
+     "label": "Visites de relance / Visite 3",
+     "kind": "text",
+     "value": ""
+    },
+    {
+     "key": "p03.age_probable.v1_t1",
+     "label": "Age probable de la grossesse / Visite 1",
+     "kind": "text",
+     "value": "16 SA + 3 j"
+    },
+    {
+     "key": "p03.age_probable.v2_t1",
+     "label": "Age probable de la grossesse / Visite 2",
+     "kind": "text",
+     "value": "20 SA + 2 j"
+    },
+    {
+     "key": "p03.age_probable.v3_t1",
+     "label": "Age probable de la grossesse / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.poids_kg.v1_t1",
+     "label": "Poids / Visite 1",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.poids_kg.v2_t1",
+     "label": "Poids / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.poids_kg.v3_t1",
+     "label": "Poids / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.ta.v1_t1",
+     "label": "TA / Visite 1",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.ta.v2_t1",
+     "label": "TA / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.ta.v3_t1",
+     "label": "TA / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.anomalies_squelette.v1_t1",
+     "label": "Anomalies du squelette / Visite 1",
+     "kind": "text",
+     "value": "RAS"
+    },
+    {
+     "key": "p03.anomalies_squelette.v2_t1",
+     "label": "Anomalies du squelette / Visite 2",
+     "kind": "text",
+     "value": "RAS"
+    },
+    {
+     "key": "p03.anomalies_squelette.v3_t1",
+     "label": "Anomalies du squelette / Visite 3",
+     "kind": "text",
+     "value": "RAS"
+    },
+    {
+     "key": "p03.etat_des_conjonctives.v1_t1",
+     "label": "Etat des conjonctives / Visite 1",
+     "kind": "text",
+     "value": "Colorées"
+    },
+    {
+     "key": "p03.etat_des_conjonctives.v2_t1",
+     "label": "Etat des conjonctives / Visite 2",
+     "kind": "text",
+     "value": "Colorées"
+    },
+    {
+     "key": "p03.etat_des_conjonctives.v3_t1",
+     "label": "Etat des conjonctives / Visite 3",
+     "kind": "text",
+     "value": "Colorées"
+    },
+    {
+     "key": "p03.examen_des_seins.v1_t1",
+     "label": "Examen des seins / Visite 1",
+     "kind": "text",
+     "value": "RAS"
+    },
+    {
+     "key": "p03.examen_des_seins.v2_t1",
+     "label": "Examen des seins / Visite 2",
+     "kind": "text",
+     "value": "RAS"
+    },
+    {
+     "key": "p03.examen_des_seins.v3_t1",
+     "label": "Examen des seins / Visite 3",
+     "kind": "text",
+     "value": "RAS"
+    },
+    {
+     "key": "p03.oedemes.v1_t1",
+     "label": "Œdèmes / Visite 1",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.oedemes.v2_t1",
+     "label": "Œdèmes / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.oedemes.v3_t1",
+     "label": "Œdèmes / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.mouvements_actifs.v1_t1",
+     "label": "Mouvements actifs / Visite 1",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.mouvements_actifs.v2_t1",
+     "label": "Mouvements actifs / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.mouvements_actifs.v3_t1",
+     "label": "Mouvements actifs / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.hu_cm.v1_t1",
+     "label": "HU / Visite 1",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.hu_cm.v2_t1",
+     "label": "HU / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.hu_cm.v3_t1",
+     "label": "HU / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.bcf.v1_t1",
+     "label": "BCF / Visite 1",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.bcf.v2_t1",
+     "label": "BCF / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.bcf.v3_t1",
+     "label": "BCF / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.examen_au_speculum.v1_t1",
+     "label": "Examen au speculum / Visite 1",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.examen_au_speculum.v2_t1",
+     "label": "Examen au speculum / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.examen_au_speculum.v3_t1",
+     "label": "Examen au speculum / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.tv_etat_du_col.v1_t1",
+     "label": "Toucher vaginal: Etat du col / Visite 1",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.tv_etat_du_col.v2_t1",
+     "label": "Toucher vaginal: Etat du col / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.tv_etat_du_col.v3_t1",
+     "label": "Toucher vaginal: Etat du col / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.tv_presentation.v1_t1",
+     "label": "Toucher vaginal: Présentation / Visite 1",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.tv_presentation.v2_t1",
+     "label": "Toucher vaginal: Présentation / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.tv_presentation.v3_t1",
+     "label": "Toucher vaginal: Présentation / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.tv_bassin.v1_t1",
+     "label": "Toucher vaginal: Bassin / Visite 1",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.tv_bassin.v2_t1",
+     "label": "Toucher vaginal: Bassin / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.tv_bassin.v3_t1",
+     "label": "Toucher vaginal: Bassin / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.glucosurie.v1_t1",
+     "label": "Glucosurie / Visite 1",
+     "kind": "text",
+     "value": ""
+    },
+    {
+     "key": "p03.glucosurie.v2_t1",
+     "label": "Glucosurie / Visite 2",
+     "kind": "text",
+     "value": ""
+    },
+    {
+     "key": "p03.glucosurie.v3_t1",
+     "label": "Glucosurie / Visite 3",
+     "kind": "text",
+     "value": ""
+    },
+    {
+     "key": "p03.albuminurie.v1_t1",
+     "label": "Albuminurie / Visite 1",
+     "kind": "text",
+     "value": ""
+    },
+    {
+     "key": "p03.albuminurie.v2_t1",
+     "label": "Albuminurie / Visite 2",
+     "kind": "text",
+     "value": ""
+    },
+    {
+     "key": "p03.albuminurie.v3_t1",
+     "label": "Albuminurie / Visite 3",
+     "kind": "text",
+     "value": ""
+    },
+    {
+     "key": "p03.rubeole.v1_t1",
+     "label": "Rubéole / Visite 1",
+     "kind": "text",
+     "value": ""
+    },
+    {
+     "key": "p03.rubeole.v2_t1",
+     "label": "Rubéole / Visite 2",
+     "kind": "text",
+     "value": ""
+    },
+    {
+     "key": "p03.rubeole.v3_t1",
+     "label": "Rubéole / Visite 3",
+     "kind": "text",
+     "value": ""
+    },
+    {
+     "key": "p03.toxoplasmose.v1_t1",
+     "label": "Toxoplasmose / Visite 1",
+     "kind": "text",
+     "value": ""
+    },
+    {
+     "key": "p03.toxoplasmose.v2_t1",
+     "label": "Toxoplasmose / Visite 2",
+     "kind": "text",
+     "value": ""
+    },
+    {
+     "key": "p03.toxoplasmose.v3_t1",
+     "label": "Toxoplasmose / Visite 3",
+     "kind": "text",
+     "value": ""
+    },
+    {
+     "key": "p03.syphilis_tpha_vdrl.v1_t1",
+     "label": "Syphilis (TPHA/VDRL) / Visite 1",
+     "kind": "text",
+     "value": "neg, neg"
+    },
+    {
+     "key": "p03.syphilis_tpha_vdrl.v2_t1",
+     "label": "Syphilis (TPHA/VDRL) / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.syphilis_tpha_vdrl.v3_t1",
+     "label": "Syphilis (TPHA/VDRL) / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.ag_hbs.v1_t1",
+     "label": "Ag HBs / Visite 1",
+     "kind": "text",
+     "value": ""
+    },
+    {
+     "key": "p03.ag_hbs.v2_t1",
+     "label": "Ag HBs / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.ag_hbs.v3_t1",
+     "label": "Ag HBs / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.serologie_vih.v1_t1",
+     "label": "Sérologie VIH / Visite 1",
+     "kind": "text",
+     "value": "neg"
+    },
+    {
+     "key": "p03.serologie_vih.v2_t1",
+     "label": "Sérologie VIH / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.serologie_vih.v3_t1",
+     "label": "Sérologie VIH / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.hemoglobine.v1_t1",
+     "label": "Hémoglobine / Visite 1",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.hemoglobine.v2_t1",
+     "label": "Hémoglobine / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.hemoglobine.v3_t1",
+     "label": "Hémoglobine / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.plaquettes.v1_t1",
+     "label": "Plaquettes / Visite 1",
+     "kind": "text",
+     "value": "233000/mm3"
+    },
+    {
+     "key": "p03.plaquettes.v2_t1",
+     "label": "Plaquettes / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.plaquettes.v3_t1",
+     "label": "Plaquettes / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.bilan_glycemique.v1_t1",
+     "label": "Bilan glycémique / Visite 1",
+     "kind": "text",
+     "value": "0,76 g/L"
+    },
+    {
+     "key": "p03.bilan_glycemique.v2_t1",
+     "label": "Bilan glycémique / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.bilan_glycemique.v3_t1",
+     "label": "Bilan glycémique / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.rai_si_rh_negatif.v1_t1",
+     "label": "RAI (si Rhésus négatif) / Visite 1",
+     "kind": "text",
+     "value": ""
+    },
+    {
+     "key": "p03.rai_si_rh_negatif.v2_t1",
+     "label": "RAI (si Rhésus négatif) / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.rai_si_rh_negatif.v3_t1",
+     "label": "RAI (si Rhésus négatif) / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.autres.v1_t1",
+     "label": "Autres (examen biologique, real form only) / Visite 1",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.autres.v2_t1",
+     "label": "Autres (examen biologique, real form only) / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.autres.v3_t1",
+     "label": "Autres (examen biologique, real form only) / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.fer.v1_t1",
+     "label": "Fer / Visite 1",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.fer.v2_t1",
+     "label": "Fer / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.fer.v3_t1",
+     "label": "Fer / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.autres_a_preciser.v1_t1",
+     "label": "Traitement: Autres à préciser (real form only) / Visite 1",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.autres_a_preciser.v2_t1",
+     "label": "Traitement: Autres à préciser (real form only) / Visite 2",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.autres_a_preciser.v3_t1",
+     "label": "Traitement: Autres à préciser (real form only) / Visite 3",
+     "kind": "text",
+     "value": "?"
+    },
+    {
+     "key": "p03.examen_fait_par.v1_t1",
+     "label": "Examen fait par (write <staff> if anything is written, never a name) / Visite 1",
+     "kind": "text",
+     "value": "<staff>"
+    },
+    {
+     "key": "p03.examen_fait_par.v2_t1",
+     "label": "Examen fait par (write <staff> if anything is written, never a name) / Visite 2",
+     "kind": "text",
+     "value": "<staff>"
+    },
+    {
+     "key": "p03.examen_fait_par.v3_t1",
+     "label": "Examen fait par (write <staff> if anything is written, never a name) / Visite 3",
+     "kind": "text",
+     "value": "<staff>"
+    }
+   ]
+  }
+ }
+}

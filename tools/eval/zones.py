@@ -10,7 +10,7 @@ Identifier fields have no cell; their areas are listed in `masks` so a cropper c
 Template geometry = patient 1's page (the least skewed one) plus, for handwriting that
 sits outside every printed slot, the union of the boxes seen on all patients.
 
-Writes data/zones/<layout>.json for pages 1 (cover, step 11), 2, 3 and 4.
+Writes data/zones/<layout>.json for pages 1 (cover, step 11), 2, 3, 4, 5/7 and 6/8 (step 12).
 """
 import json
 from pathlib import Path
@@ -47,7 +47,27 @@ PLANS = {
         ("complications", (0.57, 0.78), None, None, (0.05, 0.1, 0.01, 0.01)),
         ("newborn", (0.78, 1), None, None, (0.05, 0.1, 0.01, 0.01)),
     ]),
+    "postpartum_mother": (5, [
+        ("header", (0, 0.145), None, None, (0.36, 0.03, 0.012, 0.01)),
+        ("vitals", (0.145, 0.18), None, None, (0.03, 0.02, 0.012, 0.008)),
+        ("state", (0.18, 0.365), None, None, (0.04, 0.12, 0.012, 0.01)),
+        ("exam", (0.365, 0.46), None, None, (0.04, 0.12, 0.012, 0.01)),
+        ("complications", (0.46, 0.6), None, None, (0.04, 0.12, 0.012, 0.01)),
+        ("followup", (0.6, 0.7), None, None, (0.03, 0.2, 0.012, 0.01)),
+        ("contraception", (0.7, 1), None, None, (0.02, 0.2, 0.012, 0.01)),
+    ]),
+    "postpartum_newborn": (6, [
+        ("measures", (0, 0.175), None, None, (0.04, 0.03, 0.012, 0.008)),
+        ("signs", (0.175, 0.35), None, None, (0.02, 0.09, 0.012, 0.008)),
+        ("lesions", (0.35, 0.51), None, None, (0.02, 0.1, 0.012, 0.01)),
+        ("vaccines", (0.51, 0.67), None, None, (0.02, 0.1, 0.012, 0.01)),
+        ("decision", (0.67, 1), None, None, (0.02, 0.03, 0.012, 0.01)),
+    ]),
 }
+
+# Pages 5 and 7 print different options in the header ("7ème et 8ème jour" / "40ème et 50ème jour") at other
+# positions: the layout template also holds the slots of the later page that the first page lacks.
+EXTRA_TEMPLATE_PAGE_TYPE = {"postpartum_mother": 7}
 
 
 def cluster(values, tol):
@@ -125,6 +145,10 @@ def main():
     for layout, (page_type, _) in PLANS.items():
         page_no = (TEMPLATE_PATIENT - 1) * 8 + page_type
         slots = [dict(s) for s in gt[str(page_no)]["slots"]]
+        if layout in EXTRA_TEMPLATE_PAGE_TYPE:
+            have = {s["key"] for s in slots}
+            later = gt[str((TEMPLATE_PATIENT - 1) * 8 + EXTRA_TEMPLATE_PAGE_TYPE[layout])]["slots"]
+            slots += [dict(s) for s in later if s["key"] not in have]
         out = build_layout(layout, page_type, slots, masks[layout])
         placed = {c["key"] for z in out["zones"] for c in z["cells"]}
         missing = [s["key"] for s in slots if s["key"] not in placed]
