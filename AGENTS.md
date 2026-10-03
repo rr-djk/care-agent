@@ -2,7 +2,8 @@
 
 ## Commands (use Make, not bare npm)
 
-- `make check` — dataset guard + schema typecheck + all tests. Run before opening a PR.
+- `make check` — dataset guard + typecheck (schema, server, pwa) + all tests (schema, server, pwa, tools, python). Run before merging.
+- `make server` (API :8787, `ANALYZER=off` skips the model) and `make pwa` (Vite :5173, proxies `/api`; `VITE_FIXTURES=1` = no server). `make certs` needs mkcert (user installs it).
 - `make test` — `npm test -w @care-agent/schema`, `node --test tools/`, then `python3 -m unittest discover -s tools/eval`.
 - `make pages` — `dedupe.mjs` THEN `split.mjs` (order matters; split reads `tools/eval/data/pages.json`).
 - `make truth` — `extract_pdf.py` (ground truth) THEN `zones.py` THEN `zones_preview.py` (regenerates `docs/zones-p0*.png`).
@@ -18,7 +19,9 @@
 - `@care-agent/schema` is browser-safe; `loadPageSchema` lives in `@care-agent/schema/node` (uses `node:fs`). Never import `node:*` from the main entry.
 - `packages/schema/pages/<layout>.json` — fields (FieldDef), zones (ordered cell ids, `rows`/`columns` for tables, `label_strip`), masks. Done: identification, pregnancy, delivery. `applicability` = `"<field id> = <value>"` (no evaluator yet).
 - Prompts must stay short (CPU prefill is the bottleneck): snapshot fixtures in `packages/schema/test-fixtures/`, all zones < 130 words (tested). Answer format `{"cells":[...]}`: `""` empty, `null` illegible, checkbox `"x"`/`""`. Ollama `format` uses `anyOf` string|null (not yet run against Ollama).
-- `apps/pwa` — still a stub.
+- `apps/server/src/` (API) — `app.ts` routes per `docs/api.md`, `db.ts` (SQLite + ordered migrations, `data/care-agent.db`), `auth.ts` (demo PIN login, bearer token), `lifecycle.ts` (transition persisted BEFORE responding), `originals.ts` (AES-256-GCM, byte-exact, decrypt in memory only), `stream.ts` (events stored for NDJSON replay), `worker.ts` (one page at a time, resumes `PENDING_AI` after restart). Midwives see only their own sessions; supervisor is read-only.
+- `better-sqlite3` is pinned to 12.x (13 needs Node 22 and segfaults on Node 20); vitest pinned to 4.x for the same reason.
+- `apps/pwa/src/` — `api.ts` (token in sessionStorage), `ndjson.ts`, `state.ts` (pure reducer, flagged fields first), `components/`. Labels come from `packages/schema/pages/*.json`; never import `@care-agent/schema/node` in the PWA. Never display a raw confidence percentage.
 - `apps/server/src/vision/` — `crop.ts` (masks painted black BEFORE cropping; table zones get their `label_strip` on the left), `ink.ts` (ink ratio per cell; thresholds per layout from `ink-eval`), `model.ts` (Ollama native client), `analyze.ts` (statuses), `cache.ts` (`data/cache/`, key = crop + prompt + format + model), `queue.ts` (one model call at a time).
 - Analysis rule: only text cells WITH ink are sent to the model, listed explicitly in the prompt (`buildZonePrompt(..., {cells})`). Asked for a whole grid, Gemma packs filled values together and loses positions. Checkboxes are never sent: ink decides. A model `""` on an inked cell → `NEEDS_REVIEW`.
 - Commands: `npm run analyze -w @care-agent/server -- <page_no|png> [--zones a,b]`, `make predict ARGS='--split tune --pages p3 --limit 1'` then `make eval ARGS='--extractor eval-results/predictions-<ts>.json ...'`, `npm run ink-eval -w @care-agent/server`. Long model runs: run in the background; never two at once (one Ollama, CPU).
@@ -50,7 +53,7 @@
 
 - One branch per plan step: `feature/step-N-name`, merged to `main` once verified, then pushed. Conventional Commits in English. Progress table: "Build progress" in `docs/Care_Agent-Dev_Plan.md`.
 - No identifier fields anywhere: woman's name, husband's name, CIN, phone, address. Enforced by schema tests — keep that test green.
-- French-first UI/labels; dev plan lives at `docs/Care_Agent-Dev_Plan.md` (steps 1–5 merged). Before each merge into `main`: update the README "How to test" section, this file and the "Build progress" table.
+- French-first UI/labels; dev plan lives at `docs/Care_Agent-Dev_Plan.md` (steps 1–7 merged). Before each merge into `main`: update the README "How to test" section, this file and the "Build progress" table.
 
 ---
 

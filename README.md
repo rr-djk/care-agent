@@ -6,8 +6,8 @@ No internet, no cloud.
 
 ## Layout
 
-- `apps/pwa` - Vite + React client (placeholder)
-- `apps/server` - image analysis: crop, ink detection, Gemma 4 calls, field statuses (`analyze`, `predict`, `ink-eval` commands)
+- `apps/pwa` - Vite + React PWA: login, WhatsApp-style chat in French, photo capture, live analysis, field correction
+- `apps/server` - Hono API (SQLite, lifecycle, encrypted originals, NDJSON analysis stream) and image analysis: crop, ink detection, Gemma 4 calls, field statuses (`analyze`, `predict`, `ink-eval` commands)
 - `packages/schema` - shared zod contracts, page schemas (`pages/*.json`), zone prompts, normalizers and validators
 - `tools/eval` - ground truth from the specimen PDF, crop zones, evaluation harness
 - `tools/check-datasets.mjs` - dataset integrity guard; `tools/smoke/` - latency probe
@@ -17,7 +17,7 @@ Plan and build progress: [docs/Care_Agent-Dev_Plan.md](docs/Care_Agent-Dev_Plan.
 
 ## How to test
 
-What works today: reading registry pages with the local model, from the command line. There is no phone app yet (it comes with step 7).
+What works today: reading registry pages with the local model (command line, section 3), and the app itself: server + PWA in the browser (section 5) or on a phone (section 6). Not yet: the conversational review (Confirm/Retake per field), offline queue, image-quality check, patient linking.
 
 ### 1. Prerequisites
 
@@ -70,6 +70,32 @@ make eval ARGS='--extractor eval-results/predictions-<time>.json --split tune --
 ```
 
 Splits: `tune` (patients 2, 3, 4, 8), `calibrate` (1, 5, 7), `verify` (6, 9, 10). Results stay in `eval-results/` (git-ignored); model answers are cached in `data/cache/`.
+
+### 5. Run the app on the laptop (browser)
+
+Two terminals:
+
+```
+make server        # API on :8787. First start prints demo users sf-01, sf-02 (midwives), sup-01 (supervisor) and their PINs, once.
+make pwa           # PWA on http://localhost:5173 (/api is proxied to the server)
+```
+
+To choose the PINs instead, create `data/users.json` before the first start: `[{ "id": "sf-01", "role": "midwife", "pin": "123456" }]`.
+Open http://localhost:5173, log in as `sf-01`, tap **Nouvelle session**, pick the page type (2, 3 or 4 are analyzed), tap **Photographier une page** and choose a specimen PNG (e.g. `../datasets/data/Paper Registry/dossiers_specimen_10_patientes-19.png`, page type 3). Expected: "Photo envoyée", "Page reçue, analyse en cours…", then after a few minutes a page summary with the fields to check first; **Corriger** edits a field, **Confirmer la page** is refused while a field is still to check.
+
+- No model at hand? `ANALYZER=off make server`: upload works, analysis never starts.
+- UI only, no server: `VITE_FIXTURES=1 make pwa` replays a canned analysis.
+
+### 6. On a phone (same Wi-Fi as the laptop)
+
+The camera needs HTTPS. Once per machine:
+
+```
+mkcert -install            # installs a local root CA (install mkcert first: https://github.com/FiloSottile/mkcert)
+make certs                 # certificate for localhost + this machine's LAN IPs, in data/certs/
+```
+
+Then trust the root CA on the phone (`mkcert -CAROOT` shows where `rootCA.pem` is; Android: install it as a CA certificate; iOS: install the profile, then enable full trust in Settings > General > About > Certificate Trust Settings). Restart `make pwa`, open `https://<laptop LAN IP>:5173` on the phone. If the phone cannot reach the laptop: guest Wi-Fi often isolates clients (use a phone hotspot instead) and the laptop firewall must allow ports 5173.
 
 ### Known limits
 
