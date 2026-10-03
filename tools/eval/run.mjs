@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Minimal eval harness: ground_truth.json vs a predictions JSON ({page_no: {key: value}}).
-// Usage: run.mjs [--split tune|calibrate|verify|all] [--pages p1,p2,p3,p4] [--extractor truth|empty|<predictions.json>]
+// Usage: run.mjs [--split tune|calibrate|verify|all] [--pages p1,p2,p3,p4,p5,p6,p7,p8] [--extractor truth|empty|<predictions.json>]
 //                [--gt file] [--out dir]
 // Exact match per slot after normalization (normalize.mjs). A slot is "empty" in the ground truth when its
 // value is "" or false; predicting nothing for it is correct, and it is reported apart from the non-empty slots.
@@ -70,7 +70,7 @@ async function main() {
   const { values } = parseArgs({
     options: {
       split: { type: 'string', default: 'all' },
-      pages: { type: 'string', default: 'p1,p2,p3,p4' },
+      pages: { type: 'string', default: 'p1,p2,p3,p4,p5,p6,p7,p8' },
       extractor: { type: 'string', default: 'truth' },
       gt: { type: 'string', default: join(here, 'data', 'ground_truth.json') },
       out: { type: 'string', default: resolve(here, '..', '..', 'eval-results') },

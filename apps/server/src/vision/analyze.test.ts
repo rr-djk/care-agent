@@ -162,3 +162,13 @@ test('applicability "<field id> = <value>"', () => {
   assert.equal(isApplicable({ applicability: 'x = Césarienne' } as FieldDef, { x: 'césarienne' }), true);
   assert.equal(isApplicable({} as FieldDef, {}), undefined);
 });
+
+test('postpartum applicability: scar only after a caesarean, method only when one is wanted', () => {
+  const fields = loadPageSchema('postpartum_mother').fields;
+  const f = (id: string) => fields.find((x) => x.id === id)!;
+  assert.equal(isApplicable(f('p05.etat_de_la_cicatrice_text'), { 'p05.cesarienne': false }), false);
+  assert.equal(isApplicable(f('p05.etat_de_la_cicatrice_text'), { 'p05.cesarienne': true }), true);
+  assert.equal(isApplicable(f('p05.autre_a_preciser'), { 'p05.desire_utiliser_une_methode': false }), false);
+  assert.equal(isApplicable(f('p05.si_la_mere_ne_desire_pas_une_methode_contraceptive_pourquoi_text'), { 'p05.desire_utiliser_une_methode': false }), true);
+  assert.equal(cellStatus({ verbatim: '', empty: true, valid: true, hasInk: false, applicable: false }), 'NOT_APPLICABLE');
+});
