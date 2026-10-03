@@ -15,7 +15,10 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      workbox: { navigateFallbackDenylist: [/^\/api\//] }, // app shell only; API calls are never cached
+      workbox: {
+        navigateFallbackDenylist: [/^\/api\//], // app shell only; API calls are never cached
+        maximumFileSizeToCacheInBytes: 16 * 1024 * 1024, // the OpenCV.js worker chunk (~11 MB, wasm inlined) must be precached for offline use
+      },
       manifest: {
         name: 'Care Agent',
         short_name: 'Care Agent',

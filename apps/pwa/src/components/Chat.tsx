@@ -1,15 +1,19 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
-import type { RecordPage } from '@care-agent/schema';
+import type { Flag, QualityResult, RecordPage } from '@care-agent/schema';
 import { api, type Auth, type FieldEdit } from '../api';
 import { ApiError } from '../errors';
 import { readEvents } from '../ndjson';
 import { isOffline, isSimulated, netBlocked, setSimulated, subscribeNet } from '../offline/network';
 import * as store from '../offline/store';
 import { sync } from '../offline/sync';
+import { checkPhoto } from '../quality/client';
+import { cameraAvailable } from '../quality/guide';
 import { fieldLabel } from '../schemas';
 import { activeItemMsg, currentItem, errorText, initialState, pageLabel, pageStateLabel, queueLabel, reducer } from '../state';
+import { CameraCapture } from './CameraCapture';
 import { Composer } from './Composer';
 import { PageSummary } from './PageSummary';
+import { QualityPanel } from './QualityPanel';
 import { ReviewCard } from './ReviewCard';
 
 const STREAM_IDLE_MS = 30_000; // the server pings every 10 s: silence means the connection is dead
@@ -17,14 +21,21 @@ const MAX_RECONNECT_MS = 15_000;
 
 const toHex = (buf: ArrayBuffer) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 
+/** The capture screen in progress: live camera, quality check running, or the verdict waiting for the midwife. */
+type Capturing =
+  | { step: 'camera'; pageType: number; replaces?: string }
+  | { step: 'checking'; pageType: number; replaces?: string }
+  | { step: 'verdict'; file: File; result: QualityResult; pageType: number; replaces?: string };
+
 export function Chat({ auth, onLogout, onWipe }: { auth: Auth; onLogout: () => void; onWipe: () => void }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [local, setLocal] = useState<store.LocalPage[]>([]); // the device queue (decrypted in memory)
   const [, redraw] = useState(0);
   const stream = useRef<AbortController | null>(null);
   const end = useRef<HTMLDivElement>(null);
-  const retakeInput = useRef<HTMLInputElement>(null);
-  const retaking = useRef<{ pageId: string; pageType: number } | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const picking = useRef<{ pageType: number; replaces?: string } | null>(null);
+  const [capturing, setCapturing] = useState<Capturing | null>(null);
 
   useEffect(() => {
     end.current?.scrollIntoView({ block: 'end' });
@@ -124,7 +135,7 @@ export function Chat({ auth, onLogout, onWipe }: { auth: Auth; onLogout: () => v
     }
   };
 
-  const capture = async (file: File, pageType: number, replaces?: string) => {
+  const capture = async (file: File, pageType: number, replaces?: string, quality?: QualityResult, flags: Flag[] = []) => {
     if (!state.session) return;
     const id = crypto.randomUUID();
     try {
@@ -138,7 +149,8 @@ export function Chat({ auth, onLogout, onWipe }: { auth: Auth; onLogout: () => v
         midwife_id: auth.userId,
         sha256,
         state: 'CAPTURED',
-        flags: [],
+        flags,
+        quality,
         replaces,
       };
       await store.addPage(auth.userId, meta, bytes, file.type || 'application/octet-stream');
@@ -150,12 +162,36 @@ export function Chat({ auth, onLogout, onWipe }: { auth: Auth; onLogout: () => v
     }
   };
 
+  /** The file picker (gallery or the phone's own camera app): no live guide, the post-capture check still runs. */
+  const pick = (pageType: number, replaces?: string) => {
+    picking.current = { pageType, replaces };
+    fileInput.current?.click();
+  };
+
+  /** Live camera with the guide when the browser allows it, else the file picker. */
+  const startCapture = (pageType: number, replaces?: string) => (cameraAvailable() ? setCapturing({ step: 'camera', pageType, replaces }) : pick(pageType, replaces));
+
+  /**
+   * Post-capture check, before the page is queued (works offline). OK: queued with its quality. WARNING / REJECT: the
+   * midwife decides; « Garder quand même » queues it with the LOW_QUALITY flag. A failing check never blocks the capture.
+   */
+  const inspect = async (file: File, pageType: number, replaces?: string) => {
+    setCapturing({ step: 'checking', pageType, replaces });
+    let result: QualityResult | undefined;
+    try {
+      result = await checkPhoto(file);
+    } catch {
+      result = undefined; // OpenCV could not run: capture without a verdict rather than block the midwife
+    }
+    if (result && result.outcome !== 'OK') return setCapturing({ step: 'verdict', file, result, pageType, replaces });
+    setCapturing(null);
+    await capture(file, pageType, replaces, result);
+  };
+
   /** Reprendre la photo: the same page type again, uploaded with meta.replaces. */
   const retake = (pageId: string) => {
     const pageType = state.pages[pageId]?.pageType ?? state.review?.progress.pages.find((p) => p.page_id === pageId)?.page_type;
-    if (!pageType) return;
-    retaking.current = { pageId, pageType };
-    retakeInput.current?.click();
+    if (pageType) startCapture(pageType, pageId);
   };
 
   const edit = async (pageId: string, fieldId: string, change: FieldEdit) => {
@@ -292,18 +328,37 @@ export function Chat({ auth, onLogout, onWipe }: { auth: Auth; onLogout: () => v
         <div ref={end} />
       </main>
       <input
-        ref={retakeInput}
+        ref={fileInput}
         type="file"
         accept="image/*"
         capture="environment"
         hidden
         onChange={(e) => {
           const file = e.target.files?.[0];
-          e.target.value = '';
-          if (file && retaking.current) void capture(file, retaking.current.pageType, retaking.current.pageId);
+          e.target.value = ''; // allow choosing the same file again
+          if (file && picking.current) void inspect(file, picking.current.pageType, picking.current.replaces);
         }}
       />
-      <Composer hasSession={!!state.session} canChat={!!head} onChat={chat} onNewSession={newSession} onCapture={capture} />
+      {capturing?.step === 'camera' && (
+        <CameraCapture onCapture={(file) => void inspect(file, capturing.pageType, capturing.replaces)} onCancel={() => setCapturing(null)} />
+      )}
+      {capturing?.step === 'checking' && (
+        <div className="overlay" role="status">
+          <div className="quality">Analyse de la photo…</div>
+        </div>
+      )}
+      {capturing?.step === 'verdict' && (
+        <QualityPanel
+          file={capturing.file}
+          result={capturing.result}
+          onRetake={() => startCapture(capturing.pageType, capturing.replaces)}
+          onKeep={() => {
+            setCapturing(null);
+            void capture(capturing.file, capturing.pageType, capturing.replaces, capturing.result, ['LOW_QUALITY']);
+          }}
+        />
+      )}
+      <Composer hasSession={!!state.session} canChat={!!head} onChat={chat} onNewSession={newSession} onCapture={startCapture} onImport={pick} />
     </div>
   );
 }
