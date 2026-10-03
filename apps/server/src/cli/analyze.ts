@@ -1,12 +1,13 @@
 // Usage: npm run analyze -w @care-agent/server -- <page.png | page_no> [--layout L] [--zones id1,id2] [--json out.json] [--save-crops dir]
 // --save-crops writes, per zone sent to the model: <zone>.png (the crop), <zone>.prompt.txt and <zone>.answer.json.
+// A relative dir lands under <repo>/data/crops/ (git-ignored), so debug images never end up in a commit.
 import { mkdir, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { PAGE_LAYOUTS, type PageLayout } from '@care-agent/schema';
 import { analyzePage } from '../vision/analyze';
 import { ModelError } from '../vision/model';
-import { defaultDeps, loadPageImage, pageLayout, pagePngPath } from './pages';
+import { defaultDeps, loadPageImage, pageLayout, pagePngPath, repoRoot } from './pages';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -31,9 +32,11 @@ try {
   const page = await loadPageImage(pageNo !== undefined ? pagePngPath(pageNo) : resolve(target));
   console.log(`${pad('zone', 18)} ${pad('field', 44)} ${pad('verbatim', 22)} ${pad('status', 14)} ${pad('ink', 6)}`);
   const deps = defaultDeps(layout);
-  const cropDir = values['save-crops'] && resolve(process.env.INIT_CWD ?? '.', values['save-crops']);
+  const save = values['save-crops'];
+  const cropDir = save && (isAbsolute(save) ? save : resolve(repoRoot, 'data/crops', save));
   if (cropDir) {
     await mkdir(cropDir, { recursive: true });
+    console.log(`crops, prompts and answers -> ${cropDir}`);
     deps.onModelCall = async ({ zone_id, prompt, crop, content }) => {
       await writeFile(`${cropDir}/${zone_id}.png`, crop);
       await writeFile(`${cropDir}/${zone_id}.prompt.txt`, prompt + '\n');
