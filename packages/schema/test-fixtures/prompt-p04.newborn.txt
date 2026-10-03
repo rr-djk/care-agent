@@ -7,4 +7,4 @@ Crop of a French maternity record. Answer {"cells":[...]} with exactly 8 values 
 6. Périmètre crânien à la naissance
 7. Anomalie à préciser
 8. Âge gestationnel
-Copy handwriting verbatim. "" = empty, null = illegible. Never guess. Checkbox: "x" if ticked, else "". Ignore names, ID numbers, phone numbers, addresses.
+Copy handwriting verbatim. "" = empty, null only if there is writing you cannot read at all. Never invent a value. Checkbox: "x" if ticked, else "". Ignore names, ID numbers, phone numbers, addresses.
