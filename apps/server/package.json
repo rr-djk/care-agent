@@ -2,5 +2,16 @@
   "name": "@care-agent/server",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@care-agent/schema": "0.0.0",
+    "sharp": "0.35.5"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test src/vision/*.test.ts",
+    "analyze": "tsx src/cli/analyze.ts",
+    "predict": "tsx src/cli/predict.ts",
+    "ink-eval": "tsx src/cli/ink-eval.ts"
+  }
 }
