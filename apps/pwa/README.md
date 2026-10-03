@@ -1,6 +1,6 @@
 ## PWA (phone app)
 
-Vite + React + TypeScript, French UI (labels from `label_fr` in `packages/schema/pages/*.json`). Login, WhatsApp-style chat, page photo upload, analysis stream, then a guided review: the bot asks about one doubtful field at a time (Confirmer / Corriger / Reprendre la photo / Laisser illisible, progress « 2/5 champs vérifiés »), « Tout est vérifié pour la page N » + Confirmer la page, « Saisie manuelle » when the AI fails, free text answers sent to `/api/chat`, a page list for multi-page sessions. Offline queueing is step 9; the service worker only precaches the app shell so the app opens offline.
+Vite + React + TypeScript, French UI (labels from `label_fr` in `packages/schema/pages/*.json`). Login, WhatsApp-style chat, page photo upload, analysis stream, then a guided review: the bot asks about one doubtful field at a time (Confirmer / Corriger / Reprendre la photo / Laisser illisible, progress « 2/5 champs vérifiés »), « Tout est vérifié pour la page N » + Confirmer la page, « Saisie manuelle » when the AI fails, free text answers sent to `/api/chat`, a page list for multi-page sessions. Offline-first: pages are encrypted on the device (WebCrypto, IndexedDB), queued and synced when the server is reachable; header badge Hors ligne / En ligne / Synchronisation (n), a « Mode hors ligne (simulation) » switch, PIN unlock without the server, « Effacer les données de l'appareil » (design in `docs/offline.md`). The service worker precaches the app shell so the app opens offline (production build only: `vite build` + `vite preview`; the dev server has no service worker). The token is kept in memory: a reload asks for the PIN.
 
 ### Run
 
@@ -8,7 +8,7 @@ Vite + React + TypeScript, French UI (labels from `label_fr` in `packages/schema
 - HTTPS when the certificate files exist, plain HTTP otherwise. Env: `PWA_CERT`, `PWA_KEY` (default `<repo>/data/certs/{cert,key}.pem`, git-ignored). `localhost` is a secure context, so the camera and the file input work over plain HTTP on the laptop.
 - `npm run build -w @care-agent/pwa`: static build in `apps/pwa/dist` (git-ignored).
 - `VITE_FIXTURES=1 make pwa`: canned API, no server or model needed: the 1st page has a doubt and an illegible field, the 2nd page fails (AI unavailable) and offers « Saisie manuelle », a retake gives a clean page. Login: any id, PIN `123456`.
-- Tests: `npm test -w @care-agent/pwa` (NDJSON reader, reducer); typecheck: `npm run typecheck -w @care-agent/pwa`. Both run in `make check`.
+- Tests: `npm test -w @care-agent/pwa` (NDJSON reader, reducer incl. event dedupe, device crypto, encrypted store, sync engine with a fake server; `fake-indexeddb`); typecheck: `npm run typecheck -w @care-agent/pwa`. Both run in `make check`.
 
 ### Phone over the LAN (HTTPS)
 
