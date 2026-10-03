@@ -18,7 +18,10 @@
 - `@care-agent/schema` is browser-safe; `loadPageSchema` lives in `@care-agent/schema/node` (uses `node:fs`). Never import `node:*` from the main entry.
 - `packages/schema/pages/<layout>.json` — fields (FieldDef), zones (ordered cell ids, `rows`/`columns` for tables, `label_strip`), masks. Done: identification, pregnancy, delivery. `applicability` = `"<field id> = <value>"` (no evaluator yet).
 - Prompts must stay short (CPU prefill is the bottleneck): snapshot fixtures in `packages/schema/test-fixtures/`, all zones < 130 words (tested). Answer format `{"cells":[...]}`: `""` empty, `null` illegible, checkbox `"x"`/`""`. Ollama `format` uses `anyOf` string|null (not yet run against Ollama).
-- `apps/pwa`, `apps/server` — still stubs.
+- `apps/pwa` — still a stub.
+- `apps/server/src/vision/` — `crop.ts` (masks painted black BEFORE cropping; table zones get their `label_strip` on the left), `ink.ts` (ink ratio per cell; thresholds per layout from `ink-eval`), `model.ts` (Ollama native client), `analyze.ts` (statuses), `cache.ts` (`data/cache/`, key = crop + prompt + format + model), `queue.ts` (one model call at a time).
+- Analysis rule: only text cells WITH ink are sent to the model, listed explicitly in the prompt (`buildZonePrompt(..., {cells})`). Asked for a whole grid, Gemma packs filled values together and loses positions. Checkboxes are never sent: ink decides. A model `""` on an inked cell → `NEEDS_REVIEW`.
+- Commands: `npm run analyze -w @care-agent/server -- <page_no|png> [--zones a,b]`, `make predict ARGS='--split tune --pages p3 --limit 1'` then `make eval ARGS='--extractor eval-results/predictions-<ts>.json ...'`, `npm run ink-eval -w @care-agent/server`. Long model runs: run in the background; never two at once (one Ollama, CPU).
 - `tools/eval/data/ground_truth.json` — per PDF page: slots `{key, kind text|checkbox, value, bbox_frac}`. Keys are stable per layout (pages 7/8 reuse `p05`/`p06` keys). Identifier slots never exist; staff names are `<staff>`. `extract_pdf.py` aborts if an excluded value would be written.
 - `tools/eval/data/zones/<layout>.json` — one zone = one model call; `cells` order = order of `ZoneAnswer.cells`. Built from patient 1's geometry; `masks` = identifier rectangles to blank before any crop leaves the device or is shown.
 - Comparison rule (`run.mjs` + `normalize.mjs`, mirrored in `normalize.py`): case-fold, strip accents, decimal comma → dot, drop whitespace; also equal once accented letters are dropped (some handwriting fonts lack "é": image shows "N ant" for "Néant").
@@ -38,6 +41,7 @@
 ## Smoke probe quirks (from `docs/runtime-notes.md`)
 
 - Ollama native API: `"think": false` works. OpenAI-compatible `/v1`: `think` is ignored — use `reasoning_effort: none` via `EXTRA_BODY`.
+- Ollama logprobs with `gemma4:e4b` return only the FIRST token: no per-cell probability. Don't build on `token_prob`.
 - Ollama exposes no visual-token budget: `BUDGETS=560,1120` labels are only recorded unless `EXTRA_BODY_<label>` (valid JSON) is set.
 - Exit codes: 0 ok, 1 missing `MODEL`/bad env/crop, 2 runtime unreachable. Default `BASE_URL=http://localhost:11434/v1`.
 - Python is only for offline scripts (`crop.py` needs PIL). TS everywhere else.
@@ -46,7 +50,7 @@
 
 - One branch per plan step: `feature/step-N-name`, merged to `main` once verified, then pushed. Conventional Commits in English. Progress table: "Build progress" in `docs/Care_Agent-Dev_Plan.md`.
 - No identifier fields anywhere: woman's name, husband's name, CIN, phone, address. Enforced by schema tests — keep that test green.
-- French-first UI/labels; dev plan lives at `docs/Care_Agent-Dev_Plan.md` (steps 1–4 merged).
+- French-first UI/labels; dev plan lives at `docs/Care_Agent-Dev_Plan.md` (steps 1–5 merged). Before each merge into `main`: update the README "How to test" section, this file and the "Build progress" table.
 
 ---
 
