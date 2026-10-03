@@ -6,5 +6,6 @@
 - Demo users (demo-grade auth, see `docs/api.md`): on first start `sf-01`, `sf-02` (midwives) and `sup-01` (supervisor) are created with random PINs printed once on the console (stored hashed). To choose them, put `[{ "id": "sf-01", "role": "midwife", "pin": "123456" }]` in `DATA_DIR/users.json` before the first start.
 - Originals are stored AES-256-GCM encrypted (`originals/<pageId>.bin` = iv | tag | ciphertext) and decrypted in memory only. Losing the key makes them unreadable.
 - Review flow: `GET /api/sessions/:id/review` (queue + progress), `PATCH` confirm / correct / leave illegible, `POST /api/pages/:id/manual`, `POST /api/chat`; chat messages and identifiers (PII guard) are covered in `docs/security.md`.
+- Before the analysis the page is rectified in memory (`vision/rectify.ts`: perspective warp to 1654×2339 when a page quad is found, see `docs/quality.md`); the stored original is untouched; the log keeps only a counter (`warp: n of m analysed pages rectified since start`). A page uploaded with the `LOW_QUALITY` flag has all its `KNOWN` fields moved to `NEEDS_REVIEW` (`reason: low_quality`).
 - Logs hold method, path (ids) and status only, never field values.
 - Tests (`npm test -w @care-agent/server`) use a temp `DATA_DIR` and a fake analyzer: no Ollama.

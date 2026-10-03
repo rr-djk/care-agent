@@ -2,13 +2,15 @@
 
 Vite + React + TypeScript, French UI (labels from `label_fr` in `packages/schema/pages/*.json`). Login, WhatsApp-style chat, page photo upload, analysis stream, then a guided review: the bot asks about one doubtful field at a time (Confirmer / Corriger / Reprendre la photo / Laisser illisible, progress « 2/5 champs vérifiés »), « Tout est vérifié pour la page N » + Confirmer la page, « Saisie manuelle » when the AI fails, free text answers sent to `/api/chat`, a page list for multi-page sessions. Offline-first: pages are encrypted on the device (WebCrypto, IndexedDB), queued and synced when the server is reachable; header badge Hors ligne / En ligne / Synchronisation (n), a « Mode hors ligne (simulation) » switch, PIN unlock without the server, « Effacer les données de l'appareil » (design in `docs/offline.md`). The service worker precaches the app shell so the app opens offline (production build only: `vite build` + `vite preview`; the dev server has no service worker). The token is kept in memory: a reload asks for the PIN.
 
+**Capture and quality (step 10, `docs/quality.md`)**: « Photographier une page » opens a live camera (`getUserMedia`, rear camera) with an A4 guide that turns green when framing, blur and exposure pass, and takes the photo by itself after ~0.5 s of stability (manual shutter too); « Importer une image » and the fallback (no camera, insecure origin, permission denied) use the file picker. Every photo is then checked in a Web Worker (`src/quality/`, OpenCV.js loaded there) BEFORE it is queued, so it works offline: OK goes straight to the queue, a WARNING offers **Reprendre** / **Garder quand même** (the page gets the `LOW_QUALITY` flag, its fields go to review), a REJECT offers **Reprendre** only. The OpenCV.js asset (~11 MB) is precached by the service worker (`maximumFileSizeToCacheInBytes` raised to 16 MiB in `vite.config.ts`).
+
 ### Run
 
 - `make pwa` (or `npm run dev -w @care-agent/pwa`): serves `0.0.0.0:5173`. `/api` is proxied to `API_URL` (default `http://localhost:8787`, streaming included), so start the server too (`make server`).
 - HTTPS when the certificate files exist, plain HTTP otherwise. Env: `PWA_CERT`, `PWA_KEY` (default `<repo>/data/certs/{cert,key}.pem`, git-ignored). `localhost` is a secure context, so the camera and the file input work over plain HTTP on the laptop.
 - `npm run build -w @care-agent/pwa`: static build in `apps/pwa/dist` (git-ignored).
 - `VITE_FIXTURES=1 make pwa`: canned API, no server or model needed: the 1st page has a doubt and an illegible field, the 2nd page fails (AI unavailable) and offers « Saisie manuelle », a retake gives a clean page. Login: any id, PIN `123456`.
-- Tests: `npm test -w @care-agent/pwa` (NDJSON reader, reducer incl. event dedupe, device crypto, encrypted store, sync engine with a fake server; `fake-indexeddb`); typecheck: `npm run typecheck -w @care-agent/pwa`. Both run in `make check`.
+- Tests: `npm test -w @care-agent/pwa` (NDJSON reader, reducer incl. event dedupe, device crypto, encrypted store incl. quality in the meta, sync engine with a fake server, A4 guide geometry; `fake-indexeddb`); typecheck: `npm run typecheck -w @care-agent/pwa`. Both run in `make check`.
 
 ### Phone over the LAN (HTTPS)
 
