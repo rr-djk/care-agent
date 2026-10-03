@@ -132,7 +132,7 @@ Runs the full pipeline on the first pregnancy page of the `tune` patients and pr
 make eval ARGS='--extractor eval-results/predictions-<time>.json --split tune --pages p3'
 ```
 
-Same table as in section 2, now with real percentages. Look at `non-empty` (handwritten cells read correctly) and `empty` (blank cells correctly left empty, expected 100 %). Reference: the first full run on the 12 `tune` pages (pages 2, 3, 4 of patients 2, 3, 4, 8) gave non-empty 90.8 % (identification 92.9 %, pregnancy 89.3 %, delivery 100 %), empty 100 %. Per-field results are in the JSON (`by_key`).
+Same table as in section 2, now with real percentages. Look at `non-empty` (handwritten cells read correctly) and `empty` (blank cells correctly left empty, expected 100 %). Reference on the 12 `tune` pages (pages 2, 3, 4 of patients 2, 3, 4, 8), current prompt: non-empty **92.2 %** (identification 92.9 %, pregnancy 91.3 %, delivery 100 %), empty 100 % (the first run, before the prompt fix, gave 90.8 %). A full `tune` run takes about 1 hour on the CPU laptop; do not delete or switch the folder it runs from until it prints `wrote .../predictions-<time>.json` (results are only written at the end). Per-field results are in the JSON (`by_key`).
 
 Splits: `tune` (patients 2, 3, 4, 8), `calibrate` (1, 5, 7), `verify` (6, 9, 10). Everything generated stays in `eval-results/` and `data/` (git-ignored).
 
