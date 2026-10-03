@@ -17,7 +17,7 @@ Plan and build progress: [docs/Care_Agent-Dev_Plan.md](docs/Care_Agent-Dev_Plan.
 
 ## How to test
 
-What works today: reading registry pages with the local model (command line, section 3), and the app itself: server + PWA in the browser (section 5) or on a phone (section 6). Not yet: the conversational review (Confirm/Retake per field), offline queue, image-quality check, patient linking.
+What works today: reading registry pages with the local model (command line, section 3), and the app itself: server + PWA in the browser (section 5) or on a phone (section 6). The chat then walks the doubtful fields one by one (Confirmer / Corriger / Reprendre la photo / Laisser illisible, or type the value), and offers manual entry when the model is unavailable. Not yet: offline queue, image-quality check, patient linking.
 
 ### 1. Prerequisites
 
