@@ -36,6 +36,21 @@ const MIGRATIONS = [
   CREATE INDEX events_session ON events (session_id, id);
   `,
   'ALTER TABLE pages ADD COLUMN replaces TEXT;',
+  // Step 11. A patient is only a generated id, a fiche number and a facility: no identifier column anywhere.
+  // session_links holds the latest decision of a session (not_sure rows are replaced when the doubt is settled);
+  // redigitization = a field of a later page that differs from a value the record already holds (the choice is the midwife's).
+  `
+  CREATE TABLE patients (id TEXT PRIMARY KEY, fiche_number TEXT NOT NULL, facility TEXT NOT NULL, created_at TEXT NOT NULL);
+  CREATE TABLE counters (id TEXT PRIMARY KEY, value INTEGER NOT NULL);
+  CREATE TABLE session_links (
+    session_id TEXT PRIMARY KEY, patient_id TEXT, decision TEXT NOT NULL, decided_by TEXT NOT NULL, decided_at TEXT NOT NULL
+  );
+  CREATE INDEX session_links_patient ON session_links (patient_id);
+  CREATE TABLE redigitization (
+    page_id TEXT NOT NULL, field_id TEXT NOT NULL, patient_id TEXT NOT NULL, old_page_id TEXT NOT NULL,
+    choice TEXT NOT NULL, decided_by TEXT, decided_at TEXT, PRIMARY KEY (page_id, field_id)
+  );
+  `,
 ];
 
 export function openDb(dataDir: string): Db {
