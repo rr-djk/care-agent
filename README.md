@@ -18,7 +18,7 @@ Plan and build progress: [docs/Care_Agent-Dev_Plan.md](docs/Care_Agent-Dev_Plan.
 
 ## How to test
 
-What works today: reading registry pages with the local model (command line, section 3), and the app itself: server + PWA in the browser (section 5) or on a phone (section 6). The chat then walks the doubtful fields one by one (Confirmer / Corriger / Reprendre la photo / Laisser illisible, or type the value), and offers manual entry when the model is unavailable. Offline capture with an encrypted queue works too (section 7), and every photo goes through an on-device quality check (section 8). Patient linking works too (section 9): the cover page gives the fiche number, the bot asks which patient record the session belongs to, and a longitudinal record shows the visits. Not yet: pages 5 to 8.
+What works today: reading registry pages with the local model (command line, section 3), and the app itself: server + PWA in the browser (section 5) or on a phone (section 6). The chat then walks the doubtful fields one by one (Confirmer / Corriger / Reprendre la photo / Laisser illisible, or type the value), and offers manual entry when the model is unavailable. Offline capture with an encrypted queue works too (section 7), and every photo goes through an on-device quality check (section 8). Patient linking works too (section 9): the cover page gives the fiche number, the bot asks which patient record the session belongs to, and a longitudinal record shows the visits. Pages 5 to 8 (postpartum) are read like the others (section 3), and the cover of the real Moroccan form can be read from a photo (section 3, last part). Not yet: the other pages of the real form (booklet spreads).
 
 ### 1. Prerequisites
 
@@ -49,9 +49,9 @@ make check
 ```
 entries: 132, ok: 132, mismatches/missing: 0          <- every data file matches manifest.json
 info: 88 entries share an identical sha256 with another entry   <- normal: duplicate PNGs in the dataset
-# pass 38 / # fail 0                                  <- schema tests
+# pass 53 / # fail 0                                  <- schema tests
 # pass 7 / # fail 0                                   <- quality tests (OpenCV.js, ~10 s)
-# pass 75 / # fail 0                                  <- server tests (incl. linking)
+# pass 82 / # fail 0                                  <- server tests (incl. linking, postpartum ink, real cover)
       Tests  52 passed (52)                           <- PWA tests
 # pass 14 / # fail 0                                  <- eval tools tests
 Ran 9 tests ... OK                                    <- Python tests
@@ -66,15 +66,17 @@ make eval ARGS='--extractor truth'
 Feeds the ground truth to the harness as if it were the model, to prove the harness itself is right:
 
 ```
-layout             non-empty         empty           all
-cover               68 100.0%    142 100.0%    210 100.0%
-identification    354 100.0%    416 100.0%    770 100.0%
-pregnancy        1181 100.0%   1619 100.0%   2800 100.0%
-delivery          116 100.0%    224 100.0%    340 100.0%
-overall          1719 100.0%   2401 100.0%   4120 100.0%
+layout              non-empty         empty           all
+cover                68 100.0%    142 100.0%    210 100.0%
+identification      354 100.0%    416 100.0%    770 100.0%
+pregnancy          1181 100.0%   1619 100.0%   2800 100.0%
+delivery            116 100.0%    224 100.0%    340 100.0%
+postpartum_mother   396 100.0%    624 100.0%   1020 100.0%
+postpartum_newborn  312 100.0%    568 100.0%    880 100.0%
+overall            2427 100.0%   3593 100.0%   6020 100.0%
 ```
 
-Every cell must be `100.0%`. `non-empty` = cells with handwriting, `empty` = cells left blank on paper. The JSON report goes to `eval-results/` (git-ignored).
+The first line says `pages=p1,p2,p3,p4,p5,p6,p7,p8 (80 pages, ...)`. Every cell must be `100.0%` on all six layouts. `non-empty` = cells with handwriting, `empty` = cells left blank on paper. The JSON report goes to `eval-results/` (git-ignored).
 
 ### 3. Read one zone with the model (~40 s on a CPU laptop)
 
@@ -119,7 +121,7 @@ npm run analyze -w @care-agent/server -- 20          # delivery page: checkboxes
 npm run ink-eval -w @care-agent/server               # ink detector vs ground truth on 80 pages, no model, ~1 min
 ```
 
-`ink-eval` prints precision/recall per layout and threshold; at the thresholds used (text 0.002, delivery and cover text 0.01, checkbox 0.05) expect `precision=1.000` and `recall` ≥ `0.997`.
+`ink-eval` prints precision/recall per layout and threshold; at the thresholds used (text 0.002, but 0.01 for delivery, cover and both postpartum layouts, checkbox 0.05) expect `precision=1.000` and `recall` ≥ `0.997`. Look at the lines `postpartum_mother/text`, `postpartum_newborn/text` and the two `/checkbox` lines: at `t=0.01` (text) and `t=0.05` (checkbox) they must read `precision=1.000 recall=1.000`; a lower number means a zone or a threshold changed. Nothing is written to disk.
 
 **The cover page (page type 1)** is read the same way. Page 17 is patient 3's cover (tune split); the zone preview with the woman's name painted black is `docs/zones-p01.png`:
 
@@ -139,6 +141,36 @@ p01.facility       p01.dr   ... ink 0.5619   (ticked)      p01.mobile ... ink 0.
 ```
 
 Success: the four values equal the truth (`tools/eval/data/ground_truth.json`, page `17`: `2026-711-003`, `Marrakech-Safi`, `Al Haouz`, `DR Tahannaout Sud`), `DR` and `Mobile` have ink above 0.05 (ticked) and every other box 0.0000. The woman's name is never read: the cover schema has no field for it and its rectangle is blacked out before any crop is cut (check with `--save-crops cover17`: `data/crops/cover17/p01.identity.png` shows the four fields and no name).
+
+**Postpartum pages 5 and 6 (page types 5/7 and 6/8).** Page 13 is patient 2's page 5 (mother, tune split), page 14 her page 6 (newborn); pages 7 and 8 are read with the same layouts. Previews with the mother's name painted black: `docs/zones-p05.png`, `docs/zones-p06.png`.
+
+```
+npm run analyze -w @care-agent/server -- 13 --save-crops p13     # ~80 s on CPU
+npm run analyze -w @care-agent/server -- 14 --save-crops p14     # ~155 s on CPU
+```
+
+Output (excerpt):
+
+```
+p05.header         p05.date_de_la_consultation          "30/05/2026"    KNOWN          0.0789
+p05.vitals         p05.t_deg "36,9" KNOWN   p05.ta "117/78" KNOWN   p05.pouls "79" KNOWN   p05.poids "78 kg" KNOWN
+p05.exam           p05.cesarienne                       null            KNOWN          0.2092
+p05.exam           p05.etat_de_la_cicatrice_text        "Propre"        KNOWN
+p05.contraception  p05.si_la_mere_ne_desire_pas...      ""              NOT_APPLICABLE
+total: ... 3 zones skipped, 0 cache hits
+p06.measures       p06.age "7 jours"   p06.temperature "37.0 °C"   p06.poids "3564 g"   p06.taille "50 Cm"
+p06.signs          p06.autres_a_preciser                ""              NEEDS_REVIEW   0.0174
+```
+
+How to read it: checkbox lines show `verbatim null` (they are never sent to the model: `KNOWN`, value from the `ink` ratio, ticked ≥ 0.05, empty ≈ 0); zones with no inked text are `SKIPPED (no ink)`. Compare with `tools/eval/data/ground_truth.json` (pages `13` and `14`). Success: every ticked checkbox has ink ≥ 0.05 and no other does (0 errors seen on both pages); every handwritten value equals the truth (`36,9` = `36.9`, `Cm` = `cm` under the comparison rule); a doubtful cell is `NEEDS_REVIEW`, never a silent wrong `KNOWN`: on page 14 the model answered `""` on the inked « Autres à préciser » line (truth `Néant`) and it came out `NEEDS_REVIEW`. Failure: a ticked box with ink 0.0000, a wrong value marked `KNOWN`, or a name visible: `data/crops/p13/p05.header.png` must show a black bar where « MÈRE — <name> » is printed. The « Vu par » staff name is read as written on the page (stored as is; the ground truth only says `<staff>`).
+
+**The real cover (photo `1-1.jpg`, layout `real_cover`).** The real Moroccan form differs from the specimen, so it has its own template: 21 fields (fiche number, region, province, facility, facility type, coverage, risk), zones drawn by hand on the photo after the page warp. The command warps the photo itself (the line `warp: 1 of 1 analysed pages rectified since start` comes first); give an absolute path (npm runs it from `apps/server`):
+
+```
+npm run analyze -w @care-agent/server -- "/path/to/datasets/data/Paper Registry/1-1.jpg" --layout real_cover --save-crops real1
+```
+
+~85 s on CPU. Our live reading versus our hand labels (`tools/eval/data/real_photos_labels.json`, written by the assistant, to be verified by a human): region `Casa-Settat` and province `El Jadida` right; fiche number read `164125` for the label `A64125` and facility `CIS Sidi Smail` for `C/S Sidi Smail` (both `KNOWN` yet wrong); `Fixe` correctly ticked but five more boxes get ink above 0.05 (DR, CSU, Mobile, Grossesse à risque, Métrorragie: false positives, 11 of 16 boxes right); the dotted « Autres à préciser » line is `NEEDS_REVIEW`. This is the expected gap, not a bug to patch here: thresholds come from clean specimens (boxes 22 px, here ~40 px with thick borders), the photo was never used to tune anything, and recalibration belongs to step 13. `data/crops/real1/p01.identity.png` shows what the model saw. Success for this step: the command runs end to end, the warp line appears, region and province are right, the output has 21 fields, and no name is visible (the paper strip over the name is masked in black). A wrong fiche number is not caught by the reader: the linking step asks the midwife to confirm any fiche that is not `dddd-ddd-ddd`.
 
 ### 4. Measure accuracy on a split (long: plan tens of minutes)
 
