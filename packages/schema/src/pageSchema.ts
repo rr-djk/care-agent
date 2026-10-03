@@ -27,5 +27,5 @@ export const PageSchema = z.object({
 });
 export type PageSchema = z.infer<typeof PageSchema>;
 
-export const PAGE_LAYOUTS = ['identification', 'pregnancy', 'delivery'] as const;
+export const PAGE_LAYOUTS = ['cover', 'identification', 'pregnancy', 'delivery'] as const;
 export type PageLayout = (typeof PAGE_LAYOUTS)[number];

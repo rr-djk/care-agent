@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// One-shot bootstrap of packages/schema/pages/{identification,pregnancy,delivery}.json from the ground truth
+// One-shot bootstrap of packages/schema/pages/{cover,identification,pregnancy,delivery}.json from the ground truth
 // (printed labels + observed values over the 10 specimen patients) and tools/eval/data/zones/*.json.
 // The generated JSON files are then the source of truth and may be hand-edited: re-running this script
 // (`make schemas`) OVERWRITES those edits.
@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const LAYOUTS = ['identification', 'pregnancy', 'delivery'];
+const LAYOUTS = ['cover', 'identification', 'pregnancy', 'delivery'];
 
 // --- hand-written knowledge (everything else is inferred from the observed values) ---------------------------
 
@@ -50,6 +50,10 @@ const EN = {
   vivant: 'Alive', mort_ne: 'Stillborn', sexe: 'Sex', poids_a_la_naissance: 'Birth weight',
   perimetre_cranien_a_la_naissance: 'Head circumference at birth', anomalie_a_preciser: 'Anomaly (specify)',
   age_gestationnel: 'Gestational age', preciser_l_indication_text: 'Indication (specify)',
+  n_deg_de_la_fiche: 'Fiche number', region: 'Region', province: 'Province', nom_de_l_etablissement_sanitaire: 'Health facility',
+  dr: 'DR', csc: 'CSC', csu: 'CSU', csca: 'CSCA', csua: 'CSUA', fixe: 'Fixed', mobile: 'Mobile',
+  grossesse_classee_a_risque: 'Pregnancy classified at risk', anemie: 'Anemia', metrorragie: 'Metrorrhagia',
+  h_t_a: 'Hypertension', cardiopathie: 'Heart disease',
 };
 
 // Column parts of a key: key suffix -> [short header (prompt), label_fr part, label_en part].
@@ -110,6 +114,8 @@ const UNITS = { 'p03.bcf': 'bpm' }; // not printed in the label nor in the value
 
 // Type/category overrides by field id (first match wins) for what the observed values cannot tell.
 const OVERRIDES = [
+  [/^p01\.n_deg_de_la_fiche$/, { type: 'short_text', category: 'admin_number' }], // the linking code (step 11)
+  [/^p01\.autres_a_preciser$/, { type: 'free_text', category: 'free_text' }],
   [/^p02\.[a-z_]+\.nombre$/, { type: 'number', category: 'admin_number' }],
   [/^p02\.[a-z_]+\.age_gestationnel_sa$/, { type: 'number', category: 'vital_number', unit: 'SA', range: [4, 45] }],
   [/^p02\.[a-z_]+\.(date|lieu)$/, { type: 'short_text', category: 'short_text' }], // "date" is a year here ("2023")

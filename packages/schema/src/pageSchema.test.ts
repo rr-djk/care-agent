@@ -37,8 +37,12 @@ for (const layout of PAGE_LAYOUTS) {
   test(`${layout}: no identifier field`, () => {
     const s = loadPageSchema(layout);
     for (const f of s.fields) {
-      // "mari_famille" is the husband's family history (medical), not an identifier
-      const w = [...words(f.id.replace(/mari_famille$/, '')), ...words(f.label_fr.replace(/mari \/ famille/, '')), ...words(f.label_en)];
+      // "mari_famille" is the husband's family history (medical), not an identifier; "Nom de l'établissement" is the facility
+      const w = [
+        ...words(f.id.replace(/mari_famille$|nom_de_l_etablissement_sanitaire$/, '')),
+        ...words(f.label_fr.replace(/mari \/ famille|^Nom de l'établissement sanitaire$/, '')),
+        ...words(f.label_en),
+      ];
       assert.deepEqual(w.filter((x) => FORBIDDEN.includes(x)), [], f.id);
     }
   });
