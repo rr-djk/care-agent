@@ -487,3 +487,35 @@ test('chat (LLM engine): an unreachable model falls back to the deterministic pa
   await upload3(t, sid);
   assert.equal((await t.chat(sid, '12/04/2026')).reply, 'C’est noté : DDR = 12/04/2026.');
 });
+
+test('quality: meta.quality and the LOW_QUALITY flag are stored; LOW_QUALITY sends every KNOWN field to review', async () => {
+  const t = await setup();
+  const sid = await t.newSession();
+  const quality = { outcome: 'WARNING', metrics: { blur: 120, brightness: 180, glare: 0, framing: 0.9 }, messages: ['Photo floue : rapprochez-vous et tenez le téléphone immobile'] };
+  const low = randomUUID();
+  const clean = randomUUID();
+  const res = await t.upload('sf-01', sid, low, { quality, flags: ['LOW_QUALITY'] });
+  assert.equal(res.status, 200);
+  await t.upload('sf-01', sid, clean, { quality: { ...quality, outcome: 'OK', messages: [] } });
+  await t.settle();
+
+  const stored = await (await t.call('sf-01', `/api/pages/${low}`)).json();
+  assert.deepEqual(stored.flags, ['LOW_QUALITY']);
+  assert.deepEqual(stored.quality, quality);
+  const fields = async (id: string): Promise<ExtractedField[]> => (await (await t.call('sf-01', `/api/pages/${id}`)).json()).fields;
+  const lowFields = await fields(low);
+  const a = lowFields.find((f) => f.field_id === 'a')!;
+  assert.equal(a.status, 'NEEDS_REVIEW');
+  assert.equal(a.reason, 'low_quality');
+  assert.ok(a.confidence_signals.quality < 1);
+  assert.equal(lowFields.find((f) => f.field_id === 'b')!.status, 'NEEDS_REVIEW'); // already doubtful: untouched
+  assert.equal(lowFields.find((f) => f.field_id === 'c')!.status, 'ILLEGIBLE');
+  assert.equal((await fields(clean)).find((f) => f.field_id === 'a')!.status, 'KNOWN'); // a page without the flag is untouched
+  assert.equal((await fields(clean)).find((f) => f.field_id === 'a')!.confidence_signals.quality, 1);
+
+  const item = (await t.review(sid)).items.find((i: { page_id: string; field_id: string }) => i.page_id === low && i.field_id === 'a');
+  assert.equal(item.reason_code, 'low_quality');
+  assert.match(item.text_fr, /qualité douteuse/);
+  assert.equal((await t.patch('sf-01', low, 'a', { confirm: true })).status, 200); // the midwife can still confirm it
+  assert.equal(((await fields(low)).find((f) => f.field_id === 'a')!).status, 'KNOWN');
+});

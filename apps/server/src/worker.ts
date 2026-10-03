@@ -1,8 +1,9 @@
-import type { ExtractedField } from '@care-agent/schema';
+import type { ExtractedField, RecordPage } from '@care-agent/schema';
 import { getPage, type Db } from './db';
 import { ApiError } from './errors';
 import { transition } from './lifecycle';
 import type { OriginalStore } from './originals';
+import { LOW_QUALITY } from './review';
 import type { EventStore } from './stream';
 import { ModelError } from './vision/model';
 import { SequentialQueue } from './vision/queue';
@@ -15,6 +16,19 @@ export class AnalysisError extends Error {
   constructor(readonly code: string) {
     super(code);
   }
+}
+
+/** Quality signal given to the readings of a LOW_QUALITY page (provisional, calibrated in step 13). */
+const LOW_QUALITY_SIGNAL = 0.5;
+
+/** A page kept despite a quality warning: every KNOWN reading goes to review, whatever the model or the ink said. */
+export function applyLowQuality(page: Pick<RecordPage, 'flags'>, fields: ExtractedField[]): ExtractedField[] {
+  if (!page.flags.includes('LOW_QUALITY')) return fields;
+  return fields.map((f) =>
+    f.status === 'KNOWN'
+      ? { ...f, status: 'NEEDS_REVIEW', reason: LOW_QUALITY, confidence_signals: { ...f.confidence_signals, quality: Math.min(f.confidence_signals.quality, LOW_QUALITY_SIGNAL) } }
+      : f,
+  );
 }
 
 const SYSTEM = 'system';
@@ -62,7 +76,7 @@ export function createWorker(deps: { db: Db; originals: OriginalStore; events: E
     if (!page || page.state !== 'PENDING_AI' || !analyzer) return;
     try {
       if (page.page_type === undefined) throw new AnalysisError('page_type_required');
-      const fields = await analyzer(originals.read(pageId), page.page_type);
+      const fields = applyLowQuality(page, await analyzer(originals.read(pageId), page.page_type));
       db.transaction(() => {
         const put = db.prepare('INSERT OR REPLACE INTO fields (page_id, field_id, json) VALUES (?, ?, ?)');
         for (const f of fields) put.run(pageId, f.field_id, JSON.stringify(f));
@@ -87,7 +101,7 @@ export function createWorker(deps: { db: Db; originals: OriginalStore; events: E
     if (page.page_type === undefined) throw new ApiError(409, 'page_type_required', 'the page type is required');
     let fields: ExtractedField[];
     try {
-      fields = await inkAnalyzer(originals.read(pageId), page.page_type);
+      fields = applyLowQuality(page, await inkAnalyzer(originals.read(pageId), page.page_type));
     } catch (err) {
       if (err instanceof AnalysisError) throw new ApiError(409, err.code, `page ${pageId} cannot be entered manually`);
       throw err;

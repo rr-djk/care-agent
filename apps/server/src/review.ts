@@ -4,6 +4,7 @@ import type { ExtractedField, Flag, LifecycleState, PageSchema, ReviewAction, Re
 export const LEFT_ILLEGIBLE = 'left_illegible';
 export const MANUAL = 'manual';
 export const CORRECTED = 'corrected'; // the midwife typed a value that still fails a validator
+export const LOW_QUALITY = 'low_quality'; // the page carries the LOW_QUALITY flag: its model readings all need a check
 
 export interface ReviewPage {
   id: string;
@@ -25,12 +26,13 @@ const hasValue = (v: ExtractedField['value']) => v !== null && v !== '';
 export function reasonCode(f: ExtractedField): ReviewReason {
   if (f.status === 'ILLEGIBLE') return 'illegible';
   if (f.status === 'UNKNOWN') return f.reason === MANUAL ? 'manual' : 'not_read';
+  if (f.reason === LOW_QUALITY) return 'low_quality';
   if (f.confidence_signals.validators_passed === false) return 'unusual_value';
   if (f.confidence_signals.agreement === 0) return 'ink_but_empty'; // ink says written, the model read nothing
   return 'unusual_value'; // e.g. a cross-field rule failed
 }
 
-const KIND = { unusual_value: 'doubt', ink_but_empty: 'doubt', illegible: 'illegible', not_read: 'unread', manual: 'manual' } as const;
+const KIND = { unusual_value: 'doubt', ink_but_empty: 'doubt', illegible: 'illegible', not_read: 'unread', manual: 'manual', low_quality: 'doubt' } as const;
 
 const show = (v: ExtractedField['value']) => (typeof v === 'boolean' ? (v ? 'coché' : 'non coché') : String(v));
 
@@ -46,6 +48,8 @@ function textFr(f: ExtractedField, label: string, code: ReviewReason): string {
       return `${label} est illisible pour moi. Quelle est la valeur ?`;
     case 'not_read':
       return `Je n'ai pas pu lire ${label}. Quelle est la valeur ?`;
+    case 'low_quality':
+      return `La photo de cette page est de qualité douteuse : j'ai lu « ${show(f.value)} » pour ${label}. Pouvez-vous vérifier ?`;
     case 'manual':
       return `Il y a de l'écriture pour ${label}. Quelle est la valeur ?`;
   }
