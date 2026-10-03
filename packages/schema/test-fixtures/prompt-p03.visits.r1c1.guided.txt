@@ -1,0 +1,10 @@
+Crop of a French maternity record. Answer {"cells":[...]} with exactly 8 values in this order:
+1. Rendez-vous [T1 V1]
+2. Venue le [T1 V1]
+3. Visites de relance [T1 V1]
+4. Age probable [T1 V1]
+5. Poids (kg) [T1 V1]
+6. TA [T1 V1]
+7. Anomalies squelette [T1 V1]
+8. État des conjonctives [T1 V1]
+Copy handwriting verbatim. "" = empty, null = illegible. Never guess. Ignore names, ID numbers, phone numbers, addresses.

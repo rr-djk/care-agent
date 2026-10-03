@@ -9,19 +9,30 @@ export interface ZonePrompt {
   cellIds: string[];
 }
 
-export function buildZonePrompt(schema: PageSchema, zoneId: string): ZonePrompt {
+/**
+ * `opts.cells` (ink-guided): ask only for these cells of the zone, listed one by one in zone order, so the model
+ * cannot misplace values in a table; the answer then has exactly that many items.
+ */
+export function buildZonePrompt(schema: PageSchema, zoneId: string, opts: { cells?: string[] } = {}): ZonePrompt {
   const zone = schema.zones.find((z) => z.id === zoneId);
   if (!zone) throw new Error(`unknown zone "${zoneId}" in layout ${schema.layout}`);
-  const fields = zone.cells.map((id) => {
+  const asked = opts.cells ? zone.cells.filter((id) => opts.cells!.includes(id)) : zone.cells;
+  if (opts.cells && asked.length !== new Set(opts.cells).size) throw new Error(`zone ${zoneId}: unknown cell in ${opts.cells.join(', ')}`);
+  const fields = asked.map((id) => {
     const f = schema.fields.find((x) => x.id === id);
     if (!f) throw new Error(`zone ${zoneId}: cell "${id}" is not a field`);
     return f;
   });
-  const n = zone.cells.length;
+  const n = asked.length;
   const head = `Crop of a French maternity record. Answer {"cells":[...]} with exactly ${n} values`;
-  const layout = zone.rows && zone.columns
+  const cellLabel = (f: (typeof fields)[number]) => {
+    if (!opts.cells || !zone.rows || !zone.columns) return `${f.label_fr}${f.type === 'checkbox' ? ' (checkbox)' : ''}`;
+    const at = zone.cells.indexOf(f.id);
+    return `${zone.rows[Math.floor(at / zone.columns.length)]} [${zone.columns[at % zone.columns.length]}]`;
+  };
+  const layout = zone.rows && zone.columns && !opts.cells
     ? `, row-major.\nTable rows: ${zone.rows.join('; ')}\nColumns: ${zone.columns.join('; ')}`
-    : ` in this order:\n${fields.map((f, i) => `${i + 1}. ${f.label_fr}${f.type === 'checkbox' ? ' (checkbox)' : ''}`).join('\n')}`;
+    : ` in this order:\n${fields.map((f, i) => `${i + 1}. ${cellLabel(f)}`).join('\n')}`;
   const checkbox = fields.some((f) => f.type === 'checkbox') ? ' Checkbox: "x" if ticked, else "".' : '';
   const rules = `Copy handwriting verbatim. "" = empty, null = illegible. Never guess.${checkbox} Ignore names, ID numbers, phone numbers, addresses.`;
 
@@ -34,7 +45,7 @@ export function buildZonePrompt(schema: PageSchema, zoneId: string): ZonePrompt 
       },
       required: ['cells'],
     },
-    cellIds: zone.cells,
+    cellIds: asked,
   };
 }
 
