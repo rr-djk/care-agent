@@ -1,0 +1,11 @@
+{
+  "name": "care-agent",
+  "private": true,
+  "type": "module",
+  "workspaces": ["apps/*", "packages/*", "tools/*"],
+  "scripts": {
+    "check": "make check",
+    "dev": "echo \"dev: not implemented yet (step 1 scaffold)\""
+  },
+  "engines": { "node": ">=20" }
+}
