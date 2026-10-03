@@ -62,7 +62,7 @@
 
 - One branch per plan step: `feature/step-N-name`, merged to `main` once verified, then pushed. Conventional Commits in English. Progress table: "Build progress" in `docs/Care_Agent-Dev_Plan.md`.
 - No identifier fields anywhere: woman's name, husband's name, CIN, phone, address. Enforced by schema tests — keep that test green.
-- French-first UI/labels; dev plan lives at `docs/Care_Agent-Dev_Plan.md` (steps 1–10 merged, step 11 on its branch). Before each merge into `main`: update the README "How to test" section, this file and the "Build progress" table.
+- French-first UI/labels; dev plan lives at `docs/Care_Agent-Dev_Plan.md` (steps 1–11 merged). Before each merge into `main`: update the README "How to test" section, this file and the "Build progress" table.
 
 ---
 
