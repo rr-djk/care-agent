@@ -4,6 +4,7 @@ import { logger } from 'hono/logger';
 import sharp from 'sharp';
 import { PAGE_LAYOUTS } from '@care-agent/schema';
 import { createApp } from './app';
+import { applyCalibration, loadCalibration } from './calibration';
 import { openAiCompatModel } from './chat-llm';
 import { seedUsers } from './auth';
 import { dataDirFromEnv, openDb } from './db';
@@ -43,11 +44,14 @@ async function decode(image: Buffer, pageType: number) {
   return { layout, schema, page: await rectify({ data, width: info.width, height: info.height }) };
 }
 
+// Calibration table (make calibrate): loaded once; refused with a log line when it was fitted on another pipeline.
+const calibration = analyzerOn ? loadCalibration(`${dataDir}/calibration/table.json`) : undefined;
+
 const analyzer: Analyzer | undefined = analyzerOn
   ? async (image, pageType) => {
-      const { layout, page } = await decode(image, pageType);
+      const { layout, schema, page } = await decode(image, pageType);
       const result = await analyzePage(page, layout, defaultDeps(layout));
-      return result.fields.map((f) => ({ ...f, source_page: pageType })); // pages 7 and 8 share the layout of 5 and 6
+      return applyCalibration(calibration, schema, result.fields.map((f) => ({ ...f, source_page: pageType }))); // pages 7 and 8 share the layout of 5 and 6
     }
   : undefined;
 const inkAnalyzer: Analyzer = async (image, pageType) => {

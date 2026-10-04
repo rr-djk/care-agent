@@ -5,6 +5,7 @@ export const LEFT_ILLEGIBLE = 'left_illegible';
 export const MANUAL = 'manual';
 export const CORRECTED = 'corrected'; // the midwife typed a value that still fails a validator
 export const LOW_QUALITY = 'low_quality'; // the page carries the LOW_QUALITY flag: its model readings all need a check
+export const LOW_CATEGORY_CONFIDENCE = 'low_category_confidence'; // the calibration table demoted this whole category (calibration.ts)
 
 export interface ReviewPage {
   id: string;
@@ -27,12 +28,13 @@ export function reasonCode(f: ExtractedField): ReviewReason {
   if (f.status === 'ILLEGIBLE') return 'illegible';
   if (f.status === 'UNKNOWN') return f.reason === MANUAL ? 'manual' : 'not_read';
   if (f.reason === LOW_QUALITY) return 'low_quality';
+  if (f.reason === LOW_CATEGORY_CONFIDENCE) return 'low_category_confidence';
   if (f.confidence_signals.validators_passed === false) return 'unusual_value';
   if (f.confidence_signals.agreement === 0) return 'ink_but_empty'; // ink says written, the model read nothing
   return 'unusual_value'; // e.g. a cross-field rule failed
 }
 
-const KIND = { unusual_value: 'doubt', ink_but_empty: 'doubt', illegible: 'illegible', not_read: 'unread', manual: 'manual', low_quality: 'doubt' } as const;
+const KIND = { unusual_value: 'doubt', ink_but_empty: 'doubt', illegible: 'illegible', not_read: 'unread', manual: 'manual', low_quality: 'doubt', low_category_confidence: 'doubt' } as const;
 
 const show = (v: ExtractedField['value']) => (typeof v === 'boolean' ? (v ? 'coché' : 'non coché') : String(v));
 
@@ -50,15 +52,24 @@ function textFr(f: ExtractedField, label: string, code: ReviewReason): string {
       return `Je n'ai pas pu lire ${label}. Quelle est la valeur ?`;
     case 'low_quality':
       return `La photo de cette page est de qualité douteuse : j'ai lu « ${show(f.value)} » pour ${label}. Pouvez-vous vérifier ?`;
+    case 'low_category_confidence':
+      return `J'ai lu « ${show(f.value)} » pour ${label}, mais ce type de champ est difficile à lire pour moi. Pouvez-vous vérifier ?`;
     case 'manual':
       return `Il y a de l'écriture pour ${label}. Quelle est la valeur ?`;
   }
 }
 
+/** Audit/jury line behind the « Détails » toggle: the only place a percentage is written. */
+function calibrationDetail(calibrated: number, c: NonNullable<ExtractedField['calibration']>): string {
+  const pct = (x: number) => Math.round(100 * x);
+  return `confiance estimée ${pct(calibrated)} % [${pct(c.low)}–${pct(c.high)} %] sur ${c.n} exemples`;
+}
+
 export function reviewItem(pageId: string, f: ExtractedField, label: string): ReviewItem {
   const code = reasonCode(f);
   const actions: ReviewAction[] = [...(hasValue(f.value) ? (['confirm'] as const) : []), 'correct', 'retake', 'leave_illegible'];
-  return { page_id: pageId, field_id: f.field_id, kind: KIND[code], label_fr: label, value: f.value, reason_code: code, text_fr: textFr(f, label, code), actions };
+  const detail_fr = f.calibrated !== undefined && f.calibration ? calibrationDetail(f.calibrated, f.calibration) : undefined;
+  return { page_id: pageId, field_id: f.field_id, kind: KIND[code], label_fr: label, value: f.value, reason_code: code, text_fr: textFr(f, label, code), actions, ...(detail_fr && { detail_fr }) };
 }
 
 /**

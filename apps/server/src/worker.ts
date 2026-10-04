@@ -2,6 +2,7 @@ import type { ExtractedField, RecordPage } from '@care-agent/schema';
 import { getPage, type Db } from './db';
 import { ApiError } from './errors';
 import { transition } from './lifecycle';
+import { LOW_QUALITY_FACTOR } from './calibration';
 import type { OriginalStore } from './originals';
 import { LOW_QUALITY } from './review';
 import type { EventStore } from './stream';
@@ -18,17 +19,18 @@ export class AnalysisError extends Error {
   }
 }
 
-/** Quality signal given to the readings of a LOW_QUALITY page (provisional, calibrated in step 13). */
-const LOW_QUALITY_SIGNAL = 0.5;
-
 /** A page kept despite a quality warning: every KNOWN reading goes to review, whatever the model or the ink said. */
 export function applyLowQuality(page: Pick<RecordPage, 'flags'>, fields: ExtractedField[]): ExtractedField[] {
   if (!page.flags.includes('LOW_QUALITY')) return fields;
-  return fields.map((f) =>
-    f.status === 'KNOWN'
-      ? { ...f, status: 'NEEDS_REVIEW', reason: LOW_QUALITY, confidence_signals: { ...f.confidence_signals, quality: Math.min(f.confidence_signals.quality, LOW_QUALITY_SIGNAL) } }
-      : f,
-  );
+  return fields.map((f) => {
+    if (f.status !== 'KNOWN' && f.calibrated === undefined) return f; // doubtful, illegible or empty: untouched
+    const quality = Math.min(f.confidence_signals.quality, LOW_QUALITY_FACTOR);
+    // `calibrated` (and its interval) were computed at the old quality: rescale them to the new one
+    const k = quality / f.confidence_signals.quality;
+    const scaled = f.calibrated !== undefined && f.calibration ? { calibrated: f.calibrated * k, calibration: { ...f.calibration, low: f.calibration.low * k, high: f.calibration.high * k } } : {};
+    const confidence_signals = { ...f.confidence_signals, quality };
+    return f.status === 'KNOWN' ? { ...f, ...scaled, status: 'NEEDS_REVIEW', reason: LOW_QUALITY, confidence_signals } : { ...f, ...scaled, confidence_signals }; // a demoted field keeps its own reason
+  });
 }
 
 const SYSTEM = 'system';
