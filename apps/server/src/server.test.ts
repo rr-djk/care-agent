@@ -414,6 +414,10 @@ test('ANALYZER=ink: an uploaded page goes straight CAPTURED -> MANUAL_REVIEW_REQ
   assert.equal((await pageOf(t, id)).state, 'MANUAL_REVIEW_REQUIRED');
   assert.equal(t.count('page_transitions', `page_id = '${id}' AND to_state = 'PENDING_AI'`), 0);
   assert.equal((await t.review(sid)).items[0].kind, 'manual');
+  // « Non fourni »: an empty value is a deliberate blank, the field leaves the review queue
+  const blank = await t.call('sf-01', `/api/pages/${id}/fields/p03.taille`, { method: 'PATCH', ...t.json({ value: null }) });
+  assert.deepEqual([blank.status, (await blank.json()).status], [200, 'NOT_PROVIDED']);
+  assert.deepEqual((await t.review(sid)).items, []);
 });
 
 test('chat (deterministic): answers apply through the same code, messages are never stored', async () => {

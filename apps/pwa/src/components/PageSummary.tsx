@@ -97,7 +97,7 @@ export function PageSummary({ page, progress, onClose, onConfirmField, onCorrect
   );
 }
 
-/** A field to check: tap to open its actions (C'est juste / Corriger / Illisible). */
+/** A field to check: tap to open its actions (C'est juste / Corriger / Non fourni / Illisible). */
 function FlaggedRow({ field, editable, onConfirm, onCorrect, onLeave }: { field: ExtractedField; editable: boolean; onConfirm: () => void; onCorrect: (v: Value) => void; onLeave: () => void }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
@@ -128,7 +128,8 @@ function FlaggedRow({ field, editable, onConfirm, onCorrect, onLeave }: { field:
           )}
           <div className="grid2">
             {hasValue && <button className="btn" onClick={onConfirm}><Icon name="check" size={18} />{t('review.confirm')}</button>}
-            <button className="btn" onClick={onLeave}><Icon name="minus" size={18} />{t('review.leave')}</button>
+            <button className="btn" onClick={() => onCorrect(null)}><Icon name="minus" size={18} />{t('review.blank')}</button>
+            <button className="btn" onClick={onLeave}><Icon name="eyeoff" size={18} />{t('review.leave')}</button>
           </div>
         </div>
       )}

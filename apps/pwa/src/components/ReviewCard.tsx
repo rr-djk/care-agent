@@ -26,7 +26,7 @@ interface Props {
   onLeave: () => void;
 }
 
-/** One review question: the doubt, the value read (large), and C'est juste / Corriger / Reprendre la photo / Illisible. */
+/** One review question: the doubt, the value read (large), and C'est juste / Corriger / Reprendre la photo / Non fourni / Illisible. */
 export function ReviewCard({ item, progress, active, onConfirm, onCorrect, onRetake, onLeave }: Props) {
   useLang();
   const [editing, setEditing] = useState(false);
@@ -100,6 +100,7 @@ export function ReviewCard({ item, progress, active, onConfirm, onCorrect, onRet
               {has('correct') && (
                 <button
                   className="btn"
+                  style={has('confirm') ? undefined : { gridColumn: '1 / -1' }} // alone on its row when there is nothing to confirm
                   onClick={() => {
                     setDraft(typeof item.value === 'string' && def?.type !== 'date' && !chips ? item.value : '');
                     setEditing(true);
@@ -109,8 +110,9 @@ export function ReviewCard({ item, progress, active, onConfirm, onCorrect, onRet
                   {t('review.correct')}
                 </button>
               )}
-              {has('retake') && <button className="btn" onClick={onRetake}><Icon name="camera" size={18} />{t('review.retake')}</button>}
-              {has('leave_illegible') && <button className="btn" onClick={onLeave}><Icon name="minus" size={18} />{t('review.leave')}</button>}
+              {has('correct') && <button className="btn" onClick={() => onCorrect(null)}><Icon name="minus" size={18} />{t('review.blank')}</button>}
+              {has('leave_illegible') && <button className="btn" onClick={onLeave}><Icon name="eyeoff" size={18} />{t('review.leave')}</button>}
+              {has('retake') && <button className="btn" style={{ gridColumn: '1 / -1' }} onClick={onRetake}><Icon name="camera" size={18} />{t('review.retake')}</button>}
             </div>
           ))}
       </div>
