@@ -49,7 +49,9 @@ async function request(path: string, init: RequestInit & { timeoutMs?: number } 
   setReachable(res.status < 500); // a 5xx from the dev proxy means the server is down
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new ApiError(body.code ?? 'http_error', body.text ?? `HTTP ${res.status}`, body.field_ids, res.status);
+    // an answer without our error body (plain "404 Not Found": an older server without this route) still gets a meaningful code
+    const byStatus = res.status === 404 ? 'not_found' : res.status === 401 ? 'unauthorized' : res.status === 403 ? 'forbidden' : 'http_error';
+    throw new ApiError(body.code ?? byStatus, body.text ?? `HTTP ${res.status}`, body.field_ids, res.status);
   }
   return res;
 }
