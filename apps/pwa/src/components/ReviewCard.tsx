@@ -21,6 +21,7 @@ interface Props {
 export function ReviewCard({ item, progress, active, onConfirm, onCorrect, onRetake, onLeave }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [details, setDetails] = useState(false);
   const def = fieldDef(item.field_id);
   const value = showValue(item.value);
   const chips = def?.type === 'enum' ? (def.allowed_values ?? []).map((v) => [v, v] as const) : def?.type === 'checkbox' ? ([['coché', true], ['non coché', false]] as const) : null;
@@ -38,6 +39,12 @@ export function ReviewCard({ item, progress, active, onConfirm, onCorrect, onRet
       {active && <p className="progress">{progress.done}/{progress.total} champs vérifiés</p>}
       <p className="item-text">{item.text_fr}</p>
       {value && <p className="read-value">Valeur lue : <strong>{value}</strong></p>}
+      {item.detail_fr && (
+        <p className="item-detail">
+          <button className="link" onClick={() => setDetails(!details)}>Détails</button>
+          {details && <span> {item.detail_fr}</span>}
+        </p>
+      )}
       {active &&
         (editing ? (
           <div className="item-edit">
