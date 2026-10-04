@@ -1,7 +1,8 @@
 import type { Difference } from '@care-agent/schema';
+import { fmtDate, t, useLang } from '../i18n';
+import { fieldLabel } from '../schemas';
 
-const show = (v: Difference['old_value']) => (v === null || v === '' || v === false ? '—' : v === true ? 'coché' : v);
-const dateFr = (iso: string) => new Date(iso).toLocaleDateString('fr-FR');
+const show = (v: Difference['old_value']) => (v === null || v === '' || v === false ? '—' : v === true ? t('summary.checked') : v);
 
 interface Props {
   differences: Difference[];
@@ -10,24 +11,27 @@ interface Props {
 
 /** Re-digitization: a page type already in the record. One row per field that differs; both photos are kept either way. */
 export function DifferencesCard({ differences, onChoose }: Props) {
+  useLang();
   if (!differences.length) return null;
   return (
-    <div className="differences">
-      <p className="item-text">Cette page existe déjà dans le dossier. Pour chaque champ qui diffère, que faut-il garder ?</p>
-      <p className="hint">Les deux photos restent enregistrées. Par défaut : le nouveau si la lecture est fiable, l'ancien sinon.</p>
-      <ul>
+    <div className="bubble bot card">
+      <div className="card-head">{t('diff.intro')}</div>
+      <div className="card-body">
+        <p className="hint" style={{ marginTop: 0 }}>{t('diff.hint')}</p>
         {differences.map((d) => (
-          <li key={`${d.page_id}|${d.field_id}`}>
-            <strong>{d.label_fr}</strong>
-            <span>Ancien ({dateFr(d.old_date)}) : {show(d.old_value)} · Nouveau : {show(d.new_value)}</span>
-            <div className="item-actions">
-              <button className={d.choice === 'old' ? 'primary' : ''} aria-pressed={d.choice === 'old'} onClick={() => onChoose(d, 'old')}>Garder l'ancien</button>
-              <button className={d.choice === 'new' ? 'primary' : ''} aria-pressed={d.choice === 'new'} onClick={() => onChoose(d, 'new')}>Prendre le nouveau</button>
+          <div key={`${d.page_id}|${d.field_id}`} style={{ display: 'grid', gap: 6, paddingTop: 8, borderTop: '1px solid var(--line-2)' }}>
+            <strong>{fieldLabel(d.field_id)}</strong>
+            <span className="muted">
+              {t('diff.old', { date: fmtDate(d.old_date) })} : <span className="mono">{show(d.old_value)}</span> · {t('diff.new')} : <span className="mono">{show(d.new_value)}</span>
+            </span>
+            <div className="grid2">
+              <button className={`btn ${d.choice === 'old' ? 'go' : ''}`} aria-pressed={d.choice === 'old'} onClick={() => onChoose(d, 'old')}>{t('diff.keep_old')}</button>
+              <button className={`btn ${d.choice === 'new' ? 'go' : ''}`} aria-pressed={d.choice === 'new'} onClick={() => onChoose(d, 'new')}>{t('diff.take_new')}</button>
             </div>
-            {!d.decided && <span className="hint">choix par défaut</span>}
-          </li>
+            {!d.decided && <span className="hint">{t('diff.default')}</span>}
+          </div>
         ))}
-      </ul>
+      </div>
     </div>
   );
 }

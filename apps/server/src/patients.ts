@@ -1,7 +1,7 @@
 // Patients, linking decisions and the longitudinal record (database side). The pure rules are in linking.ts (candidates,
 // question) and record.ts (retained values, re-digitization). A patient exists only after a midwife decision; her id is
 // the next PAT-nnnnnn of a server counter, never derived from the data. No identifier is stored or returned.
-import type { Difference, ExtractedField, LinkDecision, LinkProposal, LinkResult, Patient, PatientRecord, RecordPage } from '@care-agent/schema';
+import type { Difference, ExtractedField, LinkDecision, LinkProposal, LinkResult, Patient, PatientRecord, PatientSummary, RecordPage } from '@care-agent/schema';
 import type { AuthUser } from './auth';
 import { getFields, getPage, type Db } from './db';
 import { ApiError } from './errors';
@@ -244,6 +244,45 @@ export function duplicates(db: Db, user: AuthUser) {
   return rows
     .filter((r) => user.role === 'supervisor' || r.midwife_id === user.id)
     .map((r) => ({ ...r, proposal: proposalFor(db, r.session_id) }));
+}
+
+/**
+ * The patient list of the dashboard: a midwife sees the patients she linked a session to, the supervisor sees all. Each
+ * line holds the key, the stage (postpartum once a delivery or postpartum page is in the record), a few anchors and
+ * whether a later session of the same fiche waits as a possible duplicate. Most recent visit first.
+ */
+export function patientList(db: Db, user: AuthUser): PatientSummary[] {
+  const rows = (
+    user.role === 'supervisor'
+      ? db.prepare('SELECT id, fiche_number, facility, created_at FROM patients').all()
+      : db
+          .prepare(
+            `SELECT DISTINCT p.id, p.fiche_number, p.facility, p.created_at FROM patients p
+             JOIN session_links l ON l.patient_id = p.id JOIN sessions s ON s.id = l.session_id WHERE s.midwife_id = ?`,
+          )
+          .all(user.id)
+  ) as Patient[];
+  const parked = duplicates(db, user).flatMap((d) => d.proposal.candidates.map((c) => c.patient_id));
+  return rows
+    .map((p) => {
+      const values = recordValues(db, p.id);
+      const v = db
+        .prepare('SELECT COUNT(*) AS n, MAX(s.started_at) AS last FROM session_links l JOIN sessions s ON s.id = l.session_id WHERE l.patient_id = ?')
+        .get(p.id) as { n: number; last: string | null };
+      const types = new Set([...values.values()].map((r) => r.page_type));
+      const { age, ddr, gestation, parite } = attributesOf(values);
+      const summary: PatientSummary = {
+        id: p.id,
+        fiche_number: p.fiche_number,
+        facility: p.facility,
+        visits: v.n,
+        stage: [4, 5, 6, 7, 8].some((t) => types.has(t)) ? 'postpartum' : types.has(3) ? 'pregnancy' : 'unknown',
+        duplicate: parked.includes(p.id),
+      };
+      const dpa = text(values, 3, 'p03.date_prevue_d_accouchement');
+      return Object.assign(summary, Object.fromEntries(Object.entries({ last_visit: v.last ?? undefined, age, ddr, dpa, gestation, parite }).filter(([, x]) => x !== undefined)));
+    })
+    .sort((a, b) => (b.last_visit ?? '').localeCompare(a.last_visit ?? '') || a.id.localeCompare(b.id));
 }
 
 /** The longitudinal record: visits in date order and the retained value of every non-empty field with its source page. */

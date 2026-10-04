@@ -58,10 +58,33 @@ export const CandidateSummary = z.object({
   facility: z.string(),
   age: z.number().optional(),
   ddr: z.string().optional(), // dd/mm/yyyy
+  gestation: z.number().optional(), // gravidity
+  parite: z.number().optional(),
   visits: z.number().int(),
   last_visit: z.string().optional(), // ISO date of the last linked session
 });
 export type CandidateSummary = z.infer<typeof CandidateSummary>;
+
+/** The cross-check values read on this session's own pages, shown next to each candidate (no identifier). */
+export const SessionAttributes = z.object({ age: z.number().optional(), ddr: z.string().optional(), gestation: z.number().optional(), parite: z.number().optional() });
+export type SessionAttributes = z.infer<typeof SessionAttributes>;
+
+/** One line of the midwife's patient list: the key, the stage and a few anchors; no identifier. */
+export const PatientSummary = z.object({
+  id: z.string(),
+  fiche_number: z.string(),
+  facility: z.string(),
+  visits: z.number().int(),
+  last_visit: z.string().optional(), // ISO date of the last linked session
+  stage: z.enum(['pregnancy', 'postpartum', 'unknown']), // postpartum once a delivery or postpartum page is in the record
+  age: z.number().optional(),
+  ddr: z.string().optional(),
+  dpa: z.string().optional(), // expected delivery date, dd/mm/yyyy
+  gestation: z.number().optional(),
+  parite: z.number().optional(),
+  duplicate: z.boolean(), // a later session of this fiche was parked as "Je ne sais pas"
+});
+export type PatientSummary = z.infer<typeof PatientSummary>;
 
 export const CandidateKind = z.enum(['exact', 'near_fiche', 'near_facility', 'near_attributes']);
 export type CandidateKind = z.infer<typeof CandidateKind>;
@@ -88,6 +111,7 @@ export const LinkProposal = z.object({
     low_confidence: z.boolean(),
   }),
   facility: z.string().nullable(),
+  current: SessionAttributes.optional(), // this session's own cross-check values (the comparison column of the matching screen)
   question: LinkQuestion,
   text_fr: z.string(),
   candidates: z.array(Candidate), // best first, at most 2 (the 4-button question has Patient 1 and Patient 2)

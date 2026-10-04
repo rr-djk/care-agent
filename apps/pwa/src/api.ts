@@ -1,4 +1,4 @@
-import type { Aggregates, Difference, ExtractedField, LinkDecision, LinkProposal, LinkResult, PatientRecord, RecordPage, ReviewQueue, Role, Session } from '@care-agent/schema';
+import type { Aggregates, Difference, ExtractedField, LinkDecision, LinkProposal, LinkResult, PatientRecord, PatientSummary, RecordPage, ReviewQueue, Role, Session } from '@care-agent/schema';
 import { ApiError } from './errors';
 import * as fixtures from './fixtures';
 import { netBlocked, setReachable } from './offline/network';
@@ -49,7 +49,9 @@ async function request(path: string, init: RequestInit & { timeoutMs?: number } 
   setReachable(res.status < 500); // a 5xx from the dev proxy means the server is down
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new ApiError(body.code ?? 'http_error', body.text ?? `HTTP ${res.status}`, body.field_ids, res.status);
+    // an answer without our error body (plain "404 Not Found": an older server without this route) still gets a meaningful code
+    const byStatus = res.status === 404 ? 'not_found' : res.status === 401 ? 'unauthorized' : res.status === 403 ? 'forbidden' : 'http_error';
+    throw new ApiError(body.code ?? byStatus, body.text ?? `HTTP ${res.status}`, body.field_ids, res.status);
   }
   return res;
 }
@@ -123,6 +125,10 @@ const live = {
   },
   async getPatient(id: string): Promise<PatientRecord> {
     return (await request(`/patients/${encodeURIComponent(id)}`)).json();
+  },
+  /** The patients of this midwife (all of them for the supervisor), most recent visit first. */
+  async listPatients(): Promise<PatientSummary[]> {
+    return (await request('/patients')).json();
   },
   /** Supervisor: anonymized aggregates of the linked records, and of the synthetic reference dataset (null when absent). */
   async getStats(): Promise<Aggregates> {

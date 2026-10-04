@@ -1,11 +1,20 @@
 import { useState } from 'react';
 import type { ReviewItem } from '@care-agent/schema';
-import { fieldDef } from '../schemas';
+import { getLang, t, useLang, type Key } from '../i18n';
+import { columnPart, fieldDef, fieldLabel, rowLabel } from '../schemas';
+import { Icon } from './Icon';
 
 type Value = string | boolean | null;
 
-const showValue = (v: Value) => (v === null || v === '' ? null : typeof v === 'boolean' ? (v ? 'coché' : 'non coché') : v);
+const showValue = (v: Value) => (v === null || v === '' ? null : typeof v === 'boolean' ? (v ? t('summary.checked') : t('summary.unchecked')) : v);
 const isoToFr = (iso: string) => iso.split('-').reverse().join('/'); // <input type="date"> gives yyyy-mm-dd
+
+/** The doubt in the current language: the server's French sentence, or the same sentence built from the reason code. */
+export function reviewText(item: ReviewItem): string {
+  if (getLang() === 'fr') return item.text_fr;
+  const value = showValue(item.value) ?? '';
+  return t(`review.text.${item.reason_code}` as Key, { label: fieldLabel(item.field_id), value });
+}
 
 interface Props {
   item: ReviewItem;
@@ -17,15 +26,18 @@ interface Props {
   onLeave: () => void;
 }
 
-/** One review question: the agent's doubt in French, the value it read, and Confirmer / Corriger / Reprendre / Laisser illisible. */
+/** One review question: the doubt, the value read (large), and C'est juste / Corriger / Reprendre la photo / Non fourni / Illisible. */
 export function ReviewCard({ item, progress, active, onConfirm, onCorrect, onRetake, onLeave }: Props) {
+  useLang();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [details, setDetails] = useState(false);
   const def = fieldDef(item.field_id);
   const value = showValue(item.value);
-  const chips = def?.type === 'enum' ? (def.allowed_values ?? []).map((v) => [v, v] as const) : def?.type === 'checkbox' ? ([['coché', true], ['non coché', false]] as const) : null;
+  const chips = def?.type === 'enum' ? (def.allowed_values ?? []).map((v) => [v, v] as const) : def?.type === 'checkbox' ? ([[t('summary.checked'), true], [t('summary.unchecked'), false]] as const) : null;
   const has = (a: ReviewItem['actions'][number]) => item.actions.includes(a);
+  const where = columnPart(item.field_id);
+  const tone = item.kind === 'doubt' ? '' : 'bad';
 
   const save = () => {
     if (!draft.trim()) return;
@@ -35,59 +47,75 @@ export function ReviewCard({ item, progress, active, onConfirm, onCorrect, onRet
   };
 
   return (
-    <div className={`item ${item.kind}`}>
-      {active && <p className="progress">{progress.done}/{progress.total} champs vérifiés</p>}
-      <p className="item-text">{item.text_fr}</p>
-      {value && <p className="read-value">Valeur lue : <strong>{value}</strong></p>}
-      {item.detail_fr && (
-        <p className="item-detail">
-          <button className="link" onClick={() => setDetails(!details)}>Détails</button>
-          {details && <span> {item.detail_fr}</span>}
-        </p>
-      )}
-      {active &&
-        (editing ? (
-          <div className="item-edit">
-            {chips ? (
-              <div className="chips">
-                {chips.map(([label, v]) => (
-                  <button key={label} className="chip" onClick={() => onCorrect(v)}>{label}</button>
-                ))}
+    <div className="bubble bot card">
+      <div className={`card-head ${tone}`}>
+        <span>{active ? t('review.header', { done: progress.done + 1, total: progress.total }) : t('status.NEEDS_REVIEW')}</span>
+        <span>{rowLabel(item.field_id)}{where ? ` · ${where}` : ''}</span>
+      </div>
+      <div className="card-body">
+        <p>{reviewText(item)}</p>
+        {value && (
+          <div className="value-box">
+            <span className="k">{rowLabel(item.field_id)}</span>
+            <span className="v">{value}</span>
+            {def?.unit && <span className="k">{def.unit}</span>}
+          </div>
+        )}
+        {item.detail_fr && (
+          <p className="hint">
+            <button className="linkish" onClick={() => setDetails(!details)}>{t('review.details')}</button>
+            {details && <span> {item.detail_fr}</span>}
+          </p>
+        )}
+        {active &&
+          (editing ? (
+            <div style={{ display: 'grid', gap: 8 }}>
+              {chips ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {chips.map(([label, v]) => (
+                    <button key={label} className="chip answer" onClick={() => onCorrect(v)}>{label}</button>
+                  ))}
+                </div>
+              ) : (
+                <input
+                  className="field mono"
+                  type={def?.type === 'date' ? 'date' : 'text'}
+                  inputMode={def?.type === 'number' ? 'decimal' : undefined}
+                  placeholder={def?.validators.includes('bp') ? '120/80' : def?.unit ? t('review.value_in', { unit: def.unit }) : t('review.new_value')}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && save()}
+                  aria-label={t('review.new_value')}
+                  autoFocus
+                />
+              )}
+              <div className="grid2">
+                <button className="btn" onClick={() => setEditing(false)}>{t('common.cancel')}</button>
+                {!chips && <button className="btn go" onClick={save}>{t('common.save')}</button>}
               </div>
-            ) : (
-              <input
-                type={def?.type === 'date' ? 'date' : 'text'}
-                inputMode={def?.type === 'number' ? 'decimal' : undefined}
-                placeholder={def?.validators.includes('bp') ? '120/80' : def?.unit ? `Valeur en ${def.unit}` : 'Nouvelle valeur'}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && save()}
-                aria-label="Nouvelle valeur"
-                autoFocus
-              />
-            )}
-            <div className="item-actions">
-              {!chips && <button className="primary" onClick={save}>Enregistrer</button>}
-              <button onClick={() => setEditing(false)}>Annuler</button>
             </div>
-          </div>
-        ) : (
-          <div className="item-actions">
-            {has('confirm') && <button className="primary" onClick={onConfirm}>Confirmer</button>}
-            {has('correct') && (
-              <button
-                onClick={() => {
-                  setDraft(typeof item.value === 'string' && def?.type !== 'date' && !chips ? item.value : '');
-                  setEditing(true);
-                }}
-              >
-                Corriger
-              </button>
-            )}
-            {has('retake') && <button onClick={onRetake}>Reprendre la photo</button>}
-            {has('leave_illegible') && <button onClick={onLeave}>Laisser illisible</button>}
-          </div>
-        ))}
+          ) : (
+            <div className="grid2">
+              {has('confirm') && <button className="btn go" onClick={onConfirm}><Icon name="check" size={18} />{t('review.confirm')}</button>}
+              {has('correct') && (
+                <button
+                  className="btn"
+                  style={has('confirm') ? undefined : { gridColumn: '1 / -1' }} // alone on its row when there is nothing to confirm
+                  onClick={() => {
+                    setDraft(typeof item.value === 'string' && def?.type !== 'date' && !chips ? item.value : '');
+                    setEditing(true);
+                  }}
+                >
+                  <Icon name="edit" size={18} />
+                  {t('review.correct')}
+                </button>
+              )}
+              {has('correct') && <button className="btn" onClick={() => onCorrect(null)}><Icon name="minus" size={18} />{t('review.blank')}</button>}
+              {has('leave_illegible') && <button className="btn" onClick={onLeave}><Icon name="eyeoff" size={18} />{t('review.leave')}</button>}
+              {has('retake') && <button className="btn" style={{ gridColumn: '1 / -1' }} onClick={onRetake}><Icon name="camera" size={18} />{t('review.retake')}</button>}
+            </div>
+          ))}
+      </div>
     </div>
   );
 }

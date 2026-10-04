@@ -119,6 +119,9 @@ export async function unlock(userId: string, pin: string): Promise<Auth> {
   return { token: r.secret.token, role: r.secret.role as Role, userId };
 }
 
+/** Lock (manual or after inactivity): forget the key in memory only; the same PIN unlocks again, even offline. */
+export const lock = () => clearKey();
+
 /** Logout: forget the key (memory) and delete the stored token. Queued pages stay, encrypted. */
 export async function logout(userId: string): Promise<void> {
   clearKey();

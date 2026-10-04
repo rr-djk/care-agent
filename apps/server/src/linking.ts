@@ -139,7 +139,7 @@ export function findCandidates(session: SessionKey, patients: KnownPatient[]): C
       kind,
       consistent,
       reasons: [why, ...matches, ...mismatches],
-      summary: { fiche_number: p.fiche_number, facility: p.facility, age: p.attrs.age, ddr: p.attrs.ddr, visits: p.visits, last_visit: p.last_visit },
+      summary: { fiche_number: p.fiche_number, facility: p.facility, age: p.attrs.age, ddr: p.attrs.ddr, gestation: p.attrs.gestation, parite: p.attrs.parite, visits: p.visits, last_visit: p.last_visit },
     });
   }
   return out.sort((a, b) => b.score - a.score || a.patient_id.localeCompare(b.patient_id)).slice(0, MAX_CANDIDATES);
@@ -159,7 +159,9 @@ function nearAttributes(a: Attributes, b: Attributes): boolean {
  */
 export function propose(sessionId: string, session: SessionKey, patients: KnownPatient[]): LinkProposal {
   const doubtful = session.fiche !== null && session.source !== 'typed' && normalizeFiche(session.fiche).low_confidence;
-  const base = { session_id: sessionId, fiche: { value: session.fiche, source: session.source, low_confidence: doubtful }, facility: session.facility };
+  const { age, ddr, gestation, parite } = session.attrs;
+  const current = Object.fromEntries(Object.entries({ age, ddr, gestation, parite }).filter(([, v]) => v !== undefined));
+  const base = { session_id: sessionId, fiche: { value: session.fiche, source: session.source, low_confidence: doubtful }, facility: session.facility, current };
   if (!session.fiche) {
     return { ...base, question: 'need_key', text_fr: "Je n'ai pas pu lire le numéro de la fiche. Saisissez-le (l'établissement est facultatif) pour retrouver la patiente.", candidates: [] };
   }

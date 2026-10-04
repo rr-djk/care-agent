@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Quad } from '@care-agent/quality';
 import { createStability } from '@care-agent/quality/stability';
+import { qualityText, t, useLang, type Key } from '../i18n';
 import { checkFrame } from '../quality/client';
 import { guideRect } from '../quality/guide';
 
@@ -14,12 +15,14 @@ interface Props {
 
 /** Live camera with an A4 guide: green when framing, blur and exposure pass; auto-capture once green and still for ~0.5 s. */
 export function CameraCapture({ onCapture, onCancel }: Props) {
+  useLang();
   const video = useRef<HTMLVideoElement>(null);
   const stream = useRef<MediaStream | null>(null);
   const shooting = useRef(false);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const [pass, setPass] = useState(false);
-  const [hint, setHint] = useState('Démarrage de la caméra…');
+  // what the hint says: one of the app's sentences, or a message of the quality gate (French, translated when shown)
+  const [hint, setHint] = useState<{ key: Key } | { gate: string }>({ key: 'camera.starting' });
   const [failed, setFailed] = useState(false);
 
   const stop = () => stream.current?.getTracks().forEach((t) => t.stop());
@@ -51,7 +54,7 @@ export function CameraCapture({ onCapture, onCancel }: Props) {
           const ok = result.outcome === 'OK';
           if (!alive) return;
           setPass(ok);
-          setHint(ok ? 'Ne bougez plus…' : (result.messages[0] ?? 'Cadrez la page dans le guide'));
+          setHint(ok ? { key: 'camera.hold' } : result.messages[0] ? { gate: result.messages[0] } : { key: 'camera.frame' });
           if (stability.push(performance.now(), ok, details.quad as Quad | null)) void shootRef.current();
         } catch {
           // a failed frame is skipped; a dead worker restarts on the next call
@@ -69,12 +72,12 @@ export function CameraCapture({ onCapture, onCancel }: Props) {
         v.srcObject = s;
         await v.play();
         setSize({ w: v.videoWidth, h: v.videoHeight });
-        setHint('Cadrez la page dans le guide');
+        setHint({ key: 'camera.frame' });
         void loop();
       })
       .catch(() => {
         setFailed(true);
-        setHint("Caméra indisponible ou refusée : choisissez une photo dans l'appareil.");
+        setHint({ key: 'camera.unavailable' });
       });
 
     return () => {
@@ -86,7 +89,7 @@ export function CameraCapture({ onCapture, onCancel }: Props) {
 
   const g = size ? guideRect(size.w, size.h) : null;
   return (
-    <div className="camera" role="dialog" aria-label="Caméra">
+    <div className="camera" role="dialog" aria-label={t('camera.title')}>
       {!failed && (
         <div className="camera-stage">
           {/* the frame has exactly the aspect ratio of the video, so guide fractions are fractions of the captured image */}
@@ -103,18 +106,18 @@ export function CameraCapture({ onCapture, onCancel }: Props) {
         </div>
       )}
       <p className={`camera-hint ${pass ? 'ok' : ''}`} role="status">
-        {hint}
+        {'key' in hint ? t(hint.key) : qualityText(hint.gate)}
       </p>
       <div className="camera-actions">
-        <button onClick={onCancel}>Annuler</button>
+        <button className="btn" onClick={onCancel}>{t('camera.cancel')}</button>
         {failed ? (
-          <label className="button primary">
-            Choisir une photo
+          <label className="btn go">
+            {t('chat.import')}
             <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => e.target.files?.[0] && onCapture(e.target.files[0])} />
           </label>
         ) : (
-          <button className="primary" onClick={() => void shoot()} disabled={!size} aria-label="Prendre la photo">
-            Photographier
+          <button className="btn go" onClick={() => void shoot()} disabled={!size}>
+            {t('camera.shoot')}
           </button>
         )}
       </div>

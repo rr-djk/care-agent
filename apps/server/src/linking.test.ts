@@ -32,7 +32,8 @@ test('exact key (case, separators, accents ignored) with consistent attributes: 
   assert.ok(c.score >= 0.9);
   assert.equal(c.reasons[0], 'Même numéro de fiche et même établissement.');
   assert.ok(c.reasons.includes('Âge concordant (28 ans).'));
-  assert.deepEqual(c.summary, { fiche_number: '2026-823-001', facility: 'CSCA Al Wifaq', age: 28, ddr: '12/03/2026', visits: 1, last_visit: '2026-10-01T09:00:00.000Z' });
+  assert.deepEqual(c.summary, { fiche_number: '2026-823-001', facility: 'CSCA Al Wifaq', age: 28, ddr: '12/03/2026', gestation: 2, parite: 1, visits: 1, last_visit: '2026-10-01T09:00:00.000Z' });
+  assert.deepEqual(p.current, { age: 28, ddr: '15/03/2026', gestation: 2, parite: 1 }); // the session side of the comparison (no province)
   assert.match(p.text_fr, /PAT-000001/);
 });
 

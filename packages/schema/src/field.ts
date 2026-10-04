@@ -36,6 +36,7 @@ export const ConfidenceSignals = z.object({
   agreement: z.number().optional(),
   validators_passed: z.boolean(),
   quality: z.number().min(0).max(1),
+  reader_score: z.number().min(0).max(1).optional(), // READER=cell|hybrid: per-cell reader confidence (never shown as a raw percentage)
 });
 export type ConfidenceSignals = z.infer<typeof ConfidenceSignals>;
 

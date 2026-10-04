@@ -12,6 +12,7 @@ import { loadPageSchema } from '@care-agent/schema/node';
 import { assess, loadCv } from '@care-agent/quality';
 import { pipelineHash, qualityFactor } from '../calibration';
 import { analyzePage } from '../vision/analyze';
+import { readerMode } from '../vision/cellReader';
 import { modelConfig } from '../vision/model';
 import { rectify } from '../vision/rectify';
 import { defaultDeps, loadPageImage, pageEntries, pageLayout, pagePngPath, realPhotoPath, repoRoot } from './pages';
@@ -67,6 +68,7 @@ await mkdir(`${repoRoot}/eval-results`, { recursive: true });
 const file = `${repoRoot}/eval-results/predictions-${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`;
 const hash = pipelineHash();
 const model = modelConfig().model;
+const reader = readerMode(); // READER=cell|hybrid: recorded so calibrate and report know which reader made the file
 for (const job of jobs) {
   const raw = await loadPageImage(job.path);
   const { result, details } = assess({ data: new Uint8Array(raw.data), width: raw.width, height: raw.height, channels: 3 });
@@ -84,6 +86,7 @@ for (const job of jobs) {
     patient: pageEntries.find((p) => p.page_no === job.page_no)?.patient,
     pipeline_hash: hash,
     model,
+    ...(reader !== 'gemma' && { reader }),
     gate: {
       outcome: result.outcome,
       quality,
@@ -107,8 +110,8 @@ for (const job of jobs) {
       status: c.status,
       verbatim: c.verbatim,
       value: c.value,
-      reason: c.reason,
-      signals: { agreement: c.agreement ?? null, validators_passed: !c.failed_validators.length, ink: c.ink ?? null, quality },
+      reason: c.reason ?? c.review_reason,
+      signals: { agreement: c.agreement ?? null, validators_passed: !c.failed_validators.length, ink: c.ink ?? null, quality, ...(c.reader_score !== undefined && { reader_score: c.reader_score }) },
     })),
   };
   await appendFile(file, JSON.stringify(record) + '\n');

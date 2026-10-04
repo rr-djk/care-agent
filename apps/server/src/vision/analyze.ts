@@ -14,11 +14,14 @@ import {
 } from '@care-agent/schema';
 import { loadPageSchema } from '@care-agent/schema/node';
 import { cacheKey, type Cache } from './cache';
-import { cropZone } from './crop';
+import { CELL_EXPAND_PX, READER_THRESHOLD, type CellReader, type CellReading } from './cellReader';
+import { cropZone, maskPage } from './crop';
 import { cellHasInk, checkboxInkRatio, inkRatio, type PageImage } from './ink';
-import type { ModelFn, ModelTimings } from './model';
+import { ModelError, type ModelFn, type ModelTimings } from './model';
 import { SequentialQueue } from './queue';
+import { inkTrimCrop } from './readers/common';
 import { isStaffField, maskIdentifiers, staffRole } from '../privacy';
+import { LOW_READER_CONFIDENCE } from '../review';
 
 export interface CellBox {
   kind: 'text' | 'checkbox';
@@ -32,6 +35,10 @@ export interface AnalyzeDeps {
   cellBoxes: Map<string, CellBox>;
   // Debug hook (CLI --save-crops): exactly what the model saw and answered, cache hits included.
   onModelCall?: (call: { zone_id: string; prompt: string; crop: Buffer; content: string }) => void | Promise<void>;
+  // READER=cell|hybrid (cellReader.ts): inked text cells read one by one; hybrid asks the model only below the threshold.
+  cellReader?: CellReader;
+  readerMode?: 'cell' | 'hybrid';
+  readerThreshold?: number;
 }
 
 export interface CellResult {
@@ -44,6 +51,8 @@ export interface CellResult {
   failed_validators: string[];
   checkbox?: { model: boolean; ink?: boolean }; // both readings; the final value is the ink one when available
   reason?: string; // set when the status is UNKNOWN
+  reader_score?: number; // cell reader confidence (READER=cell|hybrid)
+  review_reason?: string; // cell reader: why a KNOWN reading went to review (low_reader_confidence), stored as `reason`
 }
 
 export interface ZoneResult {
@@ -64,11 +73,13 @@ export interface StatusInput {
   valid: boolean; // normalization and validators passed
   hasInk: boolean;
   applicable?: boolean; // undefined: not evaluable on this page
+  dash?: boolean; // the cell holds a written dash ("—", "-"): the form's way of saying "non fourni"
 }
 
 /** Text cells only: checkboxes are never read by the model (their value is the ink reading, status KNOWN). */
 export function cellStatus(i: StatusInput): Status {
   if (i.verbatim === null) return 'ILLEGIBLE';
+  if (i.dash) return 'NOT_PROVIDED'; // a written "—" is ink on purpose: nothing to report, not a reading to check
   if (i.hasInk === i.empty) return 'NEEDS_REVIEW'; // ink and model disagree on emptiness
   if (i.empty) return i.applicable === false ? 'NOT_APPLICABLE' : 'NOT_PROVIDED';
   return i.valid ? 'KNOWN' : 'NEEDS_REVIEW';
@@ -100,12 +111,19 @@ const addTimings = (a: ModelTimings, b: ModelTimings): ModelTimings => ({
   gen_s: a.gen_s + b.gen_s,
 });
 
+const fold = (v: Normalized) => String(v ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, '');
+/** Hybrid: the model's and the cell reader's readings of a cell mean the same value. */
+const sameReading = (f: FieldDef, a: string | null | undefined, b: string) => a != null && fold(normalizeValue(f, a)) === fold(normalizeValue(f, b));
+
 /**
  * Reads one zone. `known` = normalized values of the fields read so far on the page (for applicability).
  * Ink first: checkboxes are never sent to the model (value = ink reading, which matched the ground truth on every
  * ticked and empty box, see `npm run ink-eval`); text cells without ink are "" without asking; only inked text cells go
  * to the model, listed one by one (ink-guided prompt) and mapped back by index.
  * Model errors (unreachable, http, timeout) propagate as ModelError; an unusable answer after one retry gives UNKNOWN cells.
+ * With a cell reader (READER=cell|hybrid): each inked text cell is cropped from the MASKED page and read alone; a KNOWN
+ * reading under the threshold goes to review (low_reader_confidence), except in hybrid mode when the model, asked about
+ * those cells only, reads the same value. A model failure in hybrid mode leaves them in review.
  */
 export async function analyzeZone(
   page: PageImage,
@@ -127,14 +145,22 @@ export async function analyzeZone(
   const hasInk = (f: FieldDef) => cellHasInk(ink.get(f.id)!, f.type === 'checkbox' ? 'checkbox' : 'text', schema.layout);
   const asked = fields.filter((f) => f.type !== 'checkbox' && hasInk(f)).map((f) => f.id);
 
+  const reader = new Map<string, CellReading>();
+  if (deps.cellReader && asked.length) {
+    const masked = maskPage(page, schema.masks); // nothing under a mask may reach the reader
+    for (const f of fields.filter((x) => asked.includes(x.id))) reader.set(f.id, await deps.cellReader.read(inkTrimCrop(masked, deps.cellBoxes.get(f.id)!.bbox_frac, CELL_EXPAND_PX), f));
+  }
+  const threshold = deps.readerThreshold ?? READER_THRESHOLD;
+  const toModel = !deps.cellReader ? asked : deps.readerMode === 'hybrid' ? asked.filter((id) => reader.get(id)!.score < threshold) : [];
+
   let answer = new Map<string, string | null>();
   let timings = ZERO;
   let cacheHit = false;
   let cropId: string | undefined;
   let failure: string | undefined;
 
-  if (asked.length) {
-    const { prompt, format, cellIds } = buildZonePrompt(schema, zoneId, { cells: asked });
+  const askModel = async () => {
+    const { prompt, format, cellIds } = buildZonePrompt(schema, zoneId, { cells: toModel });
     const crop = await cropZone(page, zone, schema.masks);
     // temperature 0 would repeat the same bad answer: the retry asks differently (and gets its own cache key)
     const prompts = [prompt, `${prompt}\nReply with valid JSON only: exactly ${cellIds.length} cells.`];
@@ -157,7 +183,18 @@ export async function analyzeZone(
       answer = parsed.cells;
       break;
     }
+  };
+  if (toModel.length && !deps.cellReader) await askModel();
+  else if (toModel.length) {
+    try {
+      await askModel();
+    } catch (e) {
+      if (!(e instanceof ModelError)) throw e;
+    }
+    if (failure) [failure, answer] = [undefined, new Map()]; // no second opinion: those cells stay in review
   }
+  const second = answer; // hybrid: the model's readings of the doubtful cells
+  if (deps.cellReader) answer = new Map(asked.map((id) => [id, reader.get(id)!.text]));
 
   const cells: CellResult[] = [];
   if (failure) {
@@ -187,11 +224,18 @@ export async function analyzeZone(
         continue;
       }
       const empty = r.value === null;
+      const dash = r.verbatim !== null && /^\s*[-–—]+\s*$/.test(r.verbatim);
+      const status = cellStatus({ verbatim: r.verbatim, empty, valid: !r.failed.length, hasInk: hasInk(r.f), applicable: isApplicable(r.f, values), dash });
+      const rd = reader.get(r.f.id);
+      // a doubtful dash too: a faint "1" read as "—" must not become "non fourni" silently
+      const doubtful = rd !== undefined && (status === 'KNOWN' || dash) && rd.score < threshold && !sameReading(r.f, second.get(r.f.id), rd.text);
       cells.push({
         ...common,
         verbatim: r.verbatim,
         agreement: +(hasInk(r.f) === !empty),
-        status: cellStatus({ verbatim: r.verbatim, empty, valid: !r.failed.length, hasInk: hasInk(r.f), applicable: isApplicable(r.f, values) }),
+        status: doubtful ? 'NEEDS_REVIEW' : status,
+        ...(rd && { reader_score: rd.score }),
+        ...(doubtful && { review_reason: LOW_READER_CONFIDENCE }),
       });
     }
   }
@@ -219,9 +263,11 @@ export function toExtractedField(c: CellResult, sourcePage: number, evidence?: s
       agreement: c.agreement,
       validators_passed: !c.failed_validators.length,
       quality: 1, // specimens are clean scans
+      ...(c.reader_score !== undefined && { reader_score: c.reader_score }),
     },
     source_page: sourcePage,
     evidence,
+    ...(c.review_reason && { reason: c.review_reason }),
   };
 }
 

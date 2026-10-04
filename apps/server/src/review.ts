@@ -6,6 +6,7 @@ export const MANUAL = 'manual';
 export const CORRECTED = 'corrected'; // the midwife typed a value that still fails a validator
 export const LOW_QUALITY = 'low_quality'; // the page carries the LOW_QUALITY flag: its model readings all need a check
 export const LOW_CATEGORY_CONFIDENCE = 'low_category_confidence'; // the calibration table demoted this whole category (calibration.ts)
+export const LOW_READER_CONFIDENCE = 'low_reader_confidence'; // READER=cell|hybrid: this cell's reading scored under the threshold
 
 export interface ReviewPage {
   id: string;
@@ -29,12 +30,13 @@ export function reasonCode(f: ExtractedField): ReviewReason {
   if (f.status === 'UNKNOWN') return f.reason === MANUAL ? 'manual' : 'not_read';
   if (f.reason === LOW_QUALITY) return 'low_quality';
   if (f.reason === LOW_CATEGORY_CONFIDENCE) return 'low_category_confidence';
+  if (f.reason === LOW_READER_CONFIDENCE) return 'low_reader_confidence';
   if (f.confidence_signals.validators_passed === false) return 'unusual_value';
   if (f.confidence_signals.agreement === 0) return 'ink_but_empty'; // ink says written, the model read nothing
   return 'unusual_value'; // e.g. a cross-field rule failed
 }
 
-const KIND = { unusual_value: 'doubt', ink_but_empty: 'doubt', illegible: 'illegible', not_read: 'unread', manual: 'manual', low_quality: 'doubt', low_category_confidence: 'doubt' } as const;
+const KIND = { unusual_value: 'doubt', ink_but_empty: 'doubt', illegible: 'illegible', not_read: 'unread', manual: 'manual', low_quality: 'doubt', low_category_confidence: 'doubt', low_reader_confidence: 'doubt' } as const;
 
 const show = (v: ExtractedField['value']) => (typeof v === 'boolean' ? (v ? 'coché' : 'non coché') : String(v));
 
@@ -54,6 +56,8 @@ function textFr(f: ExtractedField, label: string, code: ReviewReason): string {
       return `La photo de cette page est de qualité douteuse : j'ai lu « ${show(f.value)} » pour ${label}. Pouvez-vous vérifier ?`;
     case 'low_category_confidence':
       return `J'ai lu « ${show(f.value)} » pour ${label}, mais ce type de champ est difficile à lire pour moi. Pouvez-vous vérifier ?`;
+    case 'low_reader_confidence':
+      return `J'ai lu « ${show(f.value)} » pour ${label}, mais je ne suis pas sûr de ma lecture. Pouvez-vous vérifier ?`;
     case 'manual':
       return `Il y a de l'écriture pour ${label}. Quelle est la valeur ?`;
   }

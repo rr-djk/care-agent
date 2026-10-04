@@ -1,19 +1,21 @@
 import { useEffect, useState } from 'react';
 import { getAuth, setAuth, type Auth } from './api';
-import { Chat } from './components/Chat';
-import { Dashboard } from './components/Dashboard';
 import { Login } from './components/Login';
+import { Shell } from './components/Shell';
 import { Unlock } from './components/Unlock';
+import { t, useLang } from './i18n';
 import { isOffline, subscribeNet } from './offline/network';
-import { listProfiles, logout, wipe } from './offline/store';
+import { listProfiles, lock, logout, wipe } from './offline/store';
 
 type Phase = { name: 'loading' } | { name: 'unlock'; userId: string } | { name: 'login' };
 
 export function App() {
+  const lang = useLang();
   const [phase, setPhase] = useState<Phase>({ name: 'loading' });
   const [auth, setCurrent] = useState<Auth | null>(getAuth());
   const [, redraw] = useState(0);
   useEffect(() => subscribeNet(() => redraw((n) => n + 1)), []);
+  useEffect(() => void (document.documentElement.lang = lang), [lang]);
 
   // The token only lives in memory: after a reload a device with a profile unlocks with the PIN (online or not).
   useEffect(() => {
@@ -29,6 +31,14 @@ export function App() {
     setAuth(next);
     setCurrent(next);
   };
+  // Lock (button or 5 minutes without activity): the key leaves memory, the encrypted token stays; the PIN reopens.
+  const lockNow = () => {
+    if (!auth) return;
+    lock();
+    const userId = auth.userId;
+    update(null);
+    setPhase({ name: 'unlock', userId });
+  };
   const leave = async () => {
     if (auth) await logout(auth.userId); // forgets the key and deletes the stored token
     update(null);
@@ -40,11 +50,10 @@ export function App() {
     setPhase({ name: 'login' });
   };
 
-  if (auth?.role === 'supervisor') return <Dashboard auth={auth} onLogout={leave} />; // read-only: no capture, no chat
-  if (auth) return <Chat auth={auth} onLogout={leave} onWipe={erase} />;
+  if (auth) return <Shell auth={auth} onLock={lockNow} onLogout={leave} onWipe={erase} />;
   if (phase.name === 'loading') return null;
   if (phase.name === 'unlock') {
-    return <Unlock userId={phase.userId} online={!isOffline()} onUnlock={update} onOther={() => setPhase({ name: 'login' })} onWipe={() => window.confirm("Effacer toutes les données de l'appareil, y compris les pages non envoyées ?") && void erase()} />;
+    return <Unlock userId={phase.userId} online={!isOffline()} onUnlock={update} onOther={() => setPhase({ name: 'login' })} onWipe={() => window.confirm(t('unlock.wipe_confirm')) && void erase()} />;
   }
   return <Login onLogin={update} />;
 }
