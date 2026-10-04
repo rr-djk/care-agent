@@ -86,7 +86,7 @@ Needs Ollama running with `gemma4:e4b`.
 npm run analyze -w @care-agent/server -- 19 --zones p03.visits.r1c1,p03.visits.r2c1
 ```
 
-Page 19 is patient 3's pregnancy page. The visit table is cut in 7 row groups that never cross a dark section band (`docs/zones-p03.png`): `p03.visits.r1c1` = the 4 first rows (Rendez-vous to Age probable), `p03.visits.r2c1` = the next 7 (Poids to Mouvements actifs), both for the 1st-trimester visits. Output (excerpt):
+Page 19 is patient 3's pregnancy page. `p03.visits.r1c1` is the top-left block of the visit table (rows Rendez-vous to État des conjonctives, 1st-trimester visits; see `docs/zones-p03.png`). Output (excerpt):
 
 ```
 zone               field                              verbatim       status         ink
@@ -118,7 +118,7 @@ It first prints the folder, `crops, prompts and answers -> .../care-agent/data/c
 Other useful runs:
 
 ```
-npm run analyze -w @care-agent/server -- 19          # whole page: 22 zones, ~8 minutes on CPU; totals on the last line
+npm run analyze -w @care-agent/server -- 19          # whole page: 13 zones, ~2-3 minutes on CPU; totals on the last line
 npm run analyze -w @care-agent/server -- 20          # delivery page: checkboxes come from ink (no model), only text is asked
 npm run ink-eval -w @care-agent/server               # ink detector vs ground truth on 80 pages, no model, ~1 min
 ```
@@ -190,9 +190,9 @@ Same table as in section 2, now with real percentages. Look at `non-empty` (hand
 
 Splits: `tune` (patients 2, 3, 4, 8), `calibrate` (1, 5, 7), `verify` (6, 9, 10). Everything generated stays in `eval-results/` and `data/` (git-ignored).
 
-#### Tuning experiment of step 13 (pregnancy zones)
+#### Tuning experiment of step 13 (pregnancy zones) — not kept
 
-Baseline on tune page 27: glucosuria/albuminuria cells were read as empty (5 + 2 of 115 handwritten cells) and `Normaux` as `Normalux`, because the visit zones crossed the dark section bands. The visit table is now cut in 7 row groups that never cross a band (`PREGNANCY_ROW_GROUPS` in `tools/eval/zones.py`; 22 zones instead of 13). Same page, same cache, before/after: handwritten cells right **104/115 (90.4 %) -> 113/115 (98.3 %)**, blank cells 165/165 both, model time 127 s -> 521 s for the page. Details and the one regression in `docs/calibration.md`.
+Cutting the pregnancy table so that no zone crosses a dark section band (22 zones instead of 13) took tune page 27 from 104/115 (90.4 %) to 113/115 (98.3 %) handwritten cells right, but made the page 4× slower (127 s → 521 s of model time). The prototype keeps the 13 zones for processing time; how the 98 % was reached and how to deploy it with more compute is in `docs/scaling.md`.
 
 #### Degraded variants, calibration, quality curve, report (step 13)
 

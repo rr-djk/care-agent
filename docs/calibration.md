@@ -53,29 +53,20 @@ All outputs are git-ignored except `docs/results.md`. `predict` records one line
 
 ## Long runs (this CPU laptop, `gemma4:e4b`; one at a time, in the background)
 
-Measured here: a cover page ~45 s; pregnancy page 27 (22 zones) 521 s of model time after the zone re-cut (13 zones: 127 s); a zone takes 10-25 s depending on the machine's state. Estimates per page (clean): cover 1 min, identification 3 min, pregnancy 9 min, delivery 2 min, postpartum mother 1.5 min, newborn 2.5 min: **about 22 min per patient, 68 min for the 24 calibrate pages, the same for verify**. Variants cost as much as the page they come from.
+Measured here: a cover page ~45 s; pregnancy page 27 (13 zones) 127 s of model time; a zone takes 10-25 s depending on the machine's state. Estimates per page (clean): cover 1 min, identification 3 min, pregnancy 2.5 min, delivery 2 min, postpartum mother 1.5 min, newborn 2.5 min: **about 16 min per patient (8 pages), about 50 min for the 24 calibrate pages, the same for verify**. Variants cost as much as the page they come from.
 
-1. `make degrade ARGS='--split calibrate --pages p4,p6 --variants all'` (1 min, no model). `p4` and `p6` are cheap pages with many handwritten cells; avoid `p3` for variants (9 min each).
-2. `make predict ARGS='--split calibrate --variants all'`: the 24 clean calibrate pages (68 min) plus the variants of the delivery and newborn pages (4.5 min per variant set x 10 variants x 3 patients = 2 h 15): **about 3 h 30**. Lean option: `--variants blur-s1,blur-s2,blur-s4,dark-0.6,glare,jpeg-q30` on the degrade and the predict lines: about 2 h 30.
+1. `make degrade ARGS='--split calibrate --pages p4,p6 --variants all'` (1 min, no model). `p4` and `p6` are cheap pages with many handwritten cells.
+2. `make predict ARGS='--split calibrate --variants all'`: the 24 clean calibrate pages (about 50 min) plus the variants of the delivery and newborn pages (4.5 min per variant set x 10 variants x 3 patients = 2 h 15): **about 3 h**. Lean option: `--variants blur-s1,blur-s2,blur-s4,dark-0.6,glare,jpeg-q30` on the degrade and the predict lines: about 2 h.
 3. `make calibrate ARGS='--pred eval-results/predictions-<that file>.jsonl'` (seconds). Read `data/calibration/report.md`.
 4. `make quality-curve ARGS='--pred eval-results/predictions-<that file>.jsonl'` (seconds); decide on thresholds with `docs/quality.md`.
-5. `make predict ARGS='--split verify --real 1-1'` (68 min + 1.5 min). Run it after calibration: it must not influence it.
+5. `make predict ARGS='--split verify --real 1-1'` (about 50 min + 1.5 min). Run it after calibration: it must not influence it.
 6. `make report ARGS='--pred eval-results/predictions-<that file>.jsonl --publish'` (seconds; writes `docs/results.md`).
 
-`make eval-full` chains steps 1-6 (about 4 h 40 with `p4,p6` and every variant); it is documented, not run by `make check`. Never run two model jobs at once. Changing the prompt, zones or ink thresholds after step 2 makes `calibrate` refuse the file (rerun step 2).
+`make eval-full` chains steps 1-6 (about 4 h with `p4,p6` and every variant); it is documented, not run by `make check`. Never run two model jobs at once. Changing the prompt, zones or ink thresholds after step 2 makes `calibrate` refuse the file (rerun step 2).
 
-## Tuning experiment (tune split only): pregnancy zones
+## Tuning experiment (tune split only): pregnancy zones — not kept
 
-Baseline observation: on the pregnancy pages glucosuria and albuminuria cells ("Neg") came back empty, and the visits zones r3 contained the dark "EXAMEN BIOLOGIQUE" band. The table is now cut so that no zone crosses a section band: 30 rows = visits 4 | EXAMEN CLINIQUE 13 | EXAMEN BIOLOGIQUE 11 | TRAITEMENT 1 | EXAMEN FAIT PAR 1, in 7 row groups `[4, 7, 6, 6, 5, 1, 1]` (`PREGNANCY_ROW_GROUPS` in `tools/eval/zones.py`, 22 zones; field ids unchanged, only their `zone`). Zones files and `pregnancy.json` regenerated for this layout only; fixtures renamed to `prompt-p03.visits.r2c1*.txt`.
-
-Measured on tune page 27 (same cache, same model, `make predict ARGS='--split tune --page-nos 27'`):
-
-| | handwritten cells right | blank cells right | silent errors (wrong and not flagged) | zones | model time |
-| --- | --- | --- | --- | --- | --- |
-| before (13 zones) | 104 / 115 = 90.4 % | 165 / 165 | 0 | 13 | 127 s |
-| after (22 zones) | 113 / 115 = 98.3 % | 165 / 165 | 1 | 22 | 521 s |
-
-Fixed: 10 cells (5 glucosuria, 2 albuminuria, 3 `Normalux`). **Regression: 1** (`p03.tv_etat_du_col.m7_t3`, truth `Ferm`, read `Fern`, `KNOWN`: a handwriting-level misread in a crop whose composition changed), and `p03.fer.v1_t1` is still wrong (`Fer` instead of `Oui`, `NEEDS_REVIEW`, was `Ou;`). The rule "keep only if nothing regresses" is therefore met by net result (+9 cells, no band-related error left) but not to the letter; it was kept pending a second tune page (59 had 17 errors at baseline). Cost: the page takes about 4 x longer in model time (9 more zones, each with its own image read). To revert: `git checkout tools/eval/zones.py tools/eval/data/zones/pregnancy.json packages/schema/pages/pregnancy.json docs/zones-p03.png` and restore the two fixtures and `prompt.test.ts` / `pageSchema.test.ts` edits.
+Cutting the pregnancy table at its dark section bands (7 row groups `[4, 7, 6, 6, 5, 1, 1]`, 22 zones) took tune page 27 from 104/115 (90.4 %) to 113/115 (98.3 %) handwritten cells right, with one new silent error and 4× the model time (127 s → 521 s). Decision: keep the 13 zones for processing time on the CPU laptop. Commit `45d655f` (reverted by the next commit) holds the change; why it works, its cost and how to scale it are in `docs/scaling.md`. The calibration runs below use the 13-zone pipeline.
 
 ## Limits
 
