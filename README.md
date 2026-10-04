@@ -51,9 +51,9 @@ entries: 132, ok: 132, mismatches/missing: 0          <- every data file matches
 info: 88 entries share an identical sha256 with another entry   <- normal: duplicate PNGs in the dataset
 # pass 53 / # fail 0                                  <- schema tests
 # pass 7 / # fail 0                                   <- quality tests (OpenCV.js, ~10 s)
-# pass 83 / # fail 0                                  <- server tests (incl. linking, postpartum ink, real cover)
+# pass 88 / # fail 0                                  <- server tests (incl. linking, postpartum ink, real cover, calibration)
       Tests  52 passed (52)                           <- PWA tests
-# pass 14 / # fail 0                                  <- eval tools tests
+# pass 23 / # fail 0                                  <- eval tools tests (incl. calibration stats)
 Ran 9 tests ... OK                                    <- Python tests
 ```
 
