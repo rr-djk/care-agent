@@ -45,7 +45,8 @@ export const ExtractedField = z.object({
   verbatim: z.string().nullable().optional(),
   status: Status,
   confidence_signals: ConfidenceSignals,
-  calibrated: z.number().min(0).max(1).optional(),
+  calibrated: z.number().min(0).max(1).optional(), // table accuracy of the category x quality factor (audit only, never shown as a raw percentage)
+  calibration: z.object({ low: z.number(), high: z.number(), n: z.number().int() }).optional(), // Wilson 95 % interval and sample size behind `calibrated`
   source_page: z.number().int(),
   evidence: z.string().optional(), // crop id
   // Why a flagged field is in that state: 'manual' (to type), 'corrected' (typed value still failing), 'left_illegible'.

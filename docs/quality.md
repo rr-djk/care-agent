@@ -41,7 +41,19 @@ A flat full-page render (the specimen PNGs, paper to the edges, A4 aspect ± 3 %
 | no quad | paper present, no 4-corner contour | Page non détectée : posez la page à plat sur un fond sombre et cadrez-la entièrement |
 | REJECT | whole-image mean luma < 20 / no paper-coloured pixels (< 5 %) | Photo noire … / Aucune page visible : cadrez la page entière |
 
-They were chosen by eye on the 80 specimen renders, the 5 real photos and the synthetic degradations below. **Step 13** recalibrates them: degrade pages in controlled steps, run the analysis, and plot "measured quality → field accuracy"; each threshold goes where accuracy starts to fall (blur first, then exposure and glare). `LOW_QUALITY`'s 0.5 signal is provisional too.
+They were chosen by eye on the 80 specimen renders, the 5 real photos and the synthetic degradations below. **Step 13** recalibrates them: degrade pages in controlled steps, run the analysis, and tabulate "measured quality → field accuracy"; each threshold goes where accuracy starts to fall (blur first, then exposure and glare). The scripts exist (`make degrade`, `make quality-curve`, procedure below); the decision waits for the full runs. `LOW_QUALITY`'s 0.5 signal is provisional too.
+
+### Step 13: how to choose the thresholds (procedure; thresholds NOT changed yet)
+
+The tooling is in place; the decision waits for the full runs (a handful of pages is not enough).
+
+1. `make degrade ARGS='--split calibrate --pages p4,p6 --variants all'` writes graded variants (blur σ 1/2/4, motion blur 15 px, darkness ×0.6 / ×0.4, glare blob, JPEG q30, downscale ×0.5, perspective mild / strong) under the git-ignored `data/degraded/`.
+2. `make predict ARGS='--split calibrate --variants all'`: every image goes through the gate (`gate` in the record) and the analysis (`status`, `verbatim` per field).
+3. `make quality-curve ARGS='--pred eval-results/predictions-<ts>.jsonl'` prints, per variant, the accuracy on handwritten cells, the drop against the clean reading of the same pages and the mean gate metrics, then, for blur / motion / darkness / glare, the first level whose accuracy dropped by 5 points (`--drop`) and by 25 points (`--collapse`) with the metric value there.
+4. Decide: **WARNING** threshold = between the metric of the last level that still reads well and the first level with the drop (blur: `blurMin`, motion: `isotropyMin`, darkness: `lumaDarkMax`, glare: `glareMax`). **REJECT** stays "hopeless only" (black photo, no paper): move `lumaRejectMax` only if accuracy is already at the floor at a level the gate still lets through. A family with `none` is not contradicted: keep the threshold. Check afterwards with `make quality-eval` (80 clean specimens must stay `OK 80`, every blurred / dark variant must stay `WARNING`).
+5. Write the table and the chosen values here, and change `packages/quality/src/thresholds.ts` in the same commit. Note: the gate thresholds are not part of the `pipeline_hash` (they do not change what the model reads), but the quality factor stored in the calibration table comes from the gate outcome, so recalibrate after changing them.
+
+Variants are synthetic, not phone photos (see `docs/calibration.md`, Limits). Measured so far on one cover page only (illustration, not a decision): Gaussian blur σ 2 gave gate `WARNING` (blur 137 against the threshold 250) and 5 of 6 handwritten cells right against 6 of 6 clean; JPEG q30 stayed `OK` and 6 of 6.
 
 ## Page warp (`warpPage`)
 

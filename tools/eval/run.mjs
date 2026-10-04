@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Minimal eval harness: ground_truth.json vs a predictions JSON ({page_no: {key: value}}).
-// Usage: run.mjs [--split tune|calibrate|verify|all] [--pages p1,p2,p3,p4,p5,p6,p7,p8] [--extractor truth|empty|<predictions.json>]
+// Usage: run.mjs [--split tune|calibrate|verify|all] [--pages p1,p2,p3,p4,p5,p6,p7,p8] [--extractor truth|empty|<predictions.json|.jsonl>]
 //                [--gt file] [--out dir]
 // Exact match per slot after normalization (normalize.mjs). A slot is "empty" in the ground truth when its
 // value is "" or false; predicting nothing for it is correct, and it is reported apart from the non-empty slots.
@@ -89,7 +89,11 @@ async function main() {
   let predictions;
   if (values.extractor === 'truth') predictions = Object.fromEntries(pageNos.map((no) => [no, Object.fromEntries(gt[no].slots.map((s) => [s.key, s.value]))]));
   else if (values.extractor === 'empty') predictions = {};
-  else predictions = JSON.parse(await readFile(values.extractor, 'utf8'));
+  else if (values.extractor.endsWith('.jsonl')) {
+    // `make predict` output: the values of the clean pages (variants and photos are scored by calibrate / report)
+    const { readRecords, toValues } = await import('./predictions.mjs');
+    predictions = toValues(await readRecords(values.extractor));
+  } else predictions = JSON.parse(await readFile(values.extractor, 'utf8'));
 
   const result = evaluate(gt, predictions, pageNos);
   const stamp = new Date().toISOString();

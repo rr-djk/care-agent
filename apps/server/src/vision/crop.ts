@@ -3,7 +3,7 @@ import type { BBoxFrac, ZoneDef } from '@care-agent/schema';
 import type { PageImage } from './ink';
 
 // Pages are skewed up to ~15 px at 200 dpi, so crops get this much extra on every side.
-const PAD_PX = 12;
+export const PAD_PX = 12;
 
 /** Copy of the page with every mask rectangle painted black. Nothing under a mask may reach the model. */
 export function maskPage(page: PageImage, masks: BBoxFrac[]): PageImage {

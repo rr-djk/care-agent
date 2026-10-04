@@ -96,5 +96,8 @@ const TEXT_INK_MIN: Record<string, number> = { delivery: 0.01, cover: 0.01, post
 const TEXT_INK_DEFAULT = 0.002;
 const CHECKBOX_INK_MIN = 0.05; // lowest ticked box measured: 0.107, highest empty box: < 0.002
 
+/** Every constant that decides what counts as ink (part of the pipeline hash, `calibration.ts`). */
+export const INK_PARAMS = { INK_LUMA, MARGIN_PX, LINE_FRAC, ROW_LINE_FRAC, BOX_SEARCH_PX, BOX_INSET_PX, TEXT_INK_MIN, TEXT_INK_DEFAULT, CHECKBOX_INK_MIN };
+
 export const cellHasInk = (ratio: number, kind: 'text' | 'checkbox' = 'text', layout = '') =>
   ratio >= (kind === 'checkbox' ? CHECKBOX_INK_MIN : (TEXT_INK_MIN[layout] ?? TEXT_INK_DEFAULT));

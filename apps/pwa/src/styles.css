@@ -53,6 +53,8 @@ input, select { width: 100%; padding: 10px; border: 1px solid #c8c8c8; border-ra
 .item.illegible, .item.unread, .item.manual { border-left: 3px solid #d9534f; padding-left: 8px; }
 .item.doubt { border-left: 3px solid #e0a800; padding-left: 8px; }
 .read-value { margin: 4px 0 0 !important; }
+.item-detail { margin: 4px 0 0 !important; font-size: 0.8em; opacity: 0.7; }
+.item-detail .link { background: none; border: none; padding: 0; text-decoration: underline; cursor: pointer; font: inherit; }
 .read-value strong { background: #fff3cd; padding: 1px 6px; border-radius: 6px; }
 .item-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
 .item-edit { margin-top: 8px; display: grid; gap: 6px; }

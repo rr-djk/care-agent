@@ -15,10 +15,14 @@ const datasetsDir = () => resolve(repoRoot, process.env.DATASETS_DIR ?? '../data
 interface PageEntry {
   page_no: number;
   page_type: number;
+  patient: number;
   files: string[];
 }
 export const pageEntries: PageEntry[] = JSON.parse(readFileSync(`${repoRoot}/tools/eval/data/pages.json`, 'utf8')).pages;
 const groundTruth = () => JSON.parse(readFileSync(`${repoRoot}/tools/eval/data/ground_truth.json`, 'utf8'));
+
+/** A photo of the real registry (1-1.jpg ...), read-only under DATASETS_DIR. */
+export const realPhotoPath = (name: string) => resolve(datasetsDir(), 'data/Paper Registry', `${name}.jpg`);
 
 export function pagePngPath(pageNo: number): string {
   const entry = pageEntries.find((p) => p.page_no === pageNo);
