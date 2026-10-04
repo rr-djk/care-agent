@@ -72,6 +72,16 @@ const accepts = (tpl: Template, states: State[]) =>
 
 const startStates = (tpl: Template): State[] => tpl.map((_, a) => [a, -1, 0] as const);
 
+/** Whether a whole string is one of the template's patterns. */
+export function matches(tpl: Template, text: string): boolean {
+  let states = startStates(tpl);
+  for (const ch of text) {
+    states = step(tpl, states, ch);
+    if (!states.length) return false;
+  }
+  return text !== '' && accepts(tpl, states);
+}
+
 /** Characters that may follow the states (any token reachable next). */
 function nextChars(tpl: Template, states: State[]): Set<string> {
   const out = new Set<string>();
@@ -203,15 +213,21 @@ export interface FieldReading {
   rank?: number; // pattern: rank of the returned reading among the pattern's beams (0 = the most probable; > 0 = the
   // more probable ones failed the field's validators)
   logp: number; // log P of the returned text
-  logp_free: number; // log P of the best unconstrained reading (same beam search): logp_free - logp >= 0 is the cost of the constraint
-  free: string; // the unconstrained reading
-  runner_up?: { text: string; logp: number }; // enum: the second-best allowed value
+  logp_free: number; // log P of the most probable unconstrained reading (beam search): logp_free - logp >= 0 is the cost of the choice
+  free: string; // the unconstrained reading (greedy)
+  runner_up?: { text: string; logp: number }; // the best other candidate: second allowed value (enum), other pattern or free reading
 }
 
-/** Reads one cell under its field's type (phase 2). */
+/**
+ * Reads one cell under its field's type (phase 2). The greedy reading (the most probable single frame path) is kept when
+ * it already fits the field: summed over alignments, CTC can prefer "02/1/2025" to the greedy "02/11/2025" (a faint blank
+ * between two "1"); the constraint only repairs readings that do not fit. The runner-up feeds the confidence (score.ts).
+ */
 export function readField(f: Frames, field: FieldDef): FieldReading {
-  const free = beamSearch(f) ?? { text: '', logp: LOG0 };
-  const base = { free: free.text.trim(), logp_free: free.logp };
+  const frees = beamSearchAll(f);
+  const g = greedy(f).text;
+  const base = { free: g, logp_free: frees[0]?.logp ?? LOG0 };
+  const other = (hits: Decoded[], text: string) => hits.find((h) => h.text.trim() !== text);
   if (field.type === 'enum' && field.allowed_values?.length) {
     // each allowed value in the ways it may be written; its score = the best of its spellings
     const scored = [...field.allowed_values, '—']
@@ -224,14 +240,15 @@ export function readField(f: Frames, field: FieldDef): FieldReading {
   }
   const tpl = templateFor(field);
   if (tpl) {
-    // the most probable reading of the pattern that also passes the field's validators (month 0, 1 SA...), else the top one
     const hits = beamSearchAll(f, tpl);
     const valid = (t: string) => { const v = normalizeValue(field, t); return v === null || !validateField(field, v).length; };
+    if (matches(tpl, g) && valid(g)) return { ...base, text: g, method: 'pattern', logp: ctcLogLik(f, g), rank: 0, runner_up: other(hits, g) };
+    // else the most probable reading of the pattern that also passes the field's validators (month 0, 1 SA...), else the top one
     const rank = Math.max(0, hits.findIndex((h) => valid(h.text)));
-    if (hits.length) return { ...base, text: hits[rank].text, method: 'pattern', logp: hits[rank].logp, rank };
-    return { ...base, text: base.free, method: 'pattern-failed', logp: free.logp };
+    if (hits.length) return { ...base, text: hits[rank].text, method: 'pattern', logp: hits[rank].logp, rank, runner_up: other(hits, hits[rank].text) };
+    return { ...base, text: g, method: 'pattern-failed', logp: ctcLogLik(f, g), runner_up: other(frees, g) };
   }
   // free text: a dotted line that leaked into the ink count is not writing
-  const text = /^[.…·\-—_\s]*$/.test(base.free) && !/^[-—]$/.test(base.free) ? '' : base.free;
-  return { ...base, text, method: 'free', logp: free.logp };
+  const text = /^[.…·\-—_\s]*$/.test(g) && !/^[-—]$/.test(g) ? '' : g;
+  return { ...base, text, method: 'free', logp: ctcLogLik(f, g), runner_up: other(frees, g) };
 }

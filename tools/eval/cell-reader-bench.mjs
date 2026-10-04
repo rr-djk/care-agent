@@ -1,11 +1,13 @@
 // Cell-reader experiment, phase 1 (docs/cell-reader.md): reads every INKED text cell of a page with a per-cell recogniser
 // and compares with the ground truth under the eval rule (run.mjs isCorrect). No model server, no cache: pure timing.
 // Usage (from the repo root): node --import tsx tools/eval/cell-reader-bench.mjs
-//   [--readers paddle,trocr-fp32,trocr-q8] [--page-nos 10,11,...] [--real 1-1] [--prep stretch|gray|raw] [--crop ink|box] [--pad 4]
-//   [--constrain] [--out dir]
+//   [--readers paddle,trocr-fp32,trocr-q8] [--page-nos 10,11,...] [--real 1-1] [--prep stretch|gray|raw] [--crop ink|box] [--pad 4] [--margin-x 8]
+//   [--constrain] [--variants blur-s2,dark-0.6|all] [--out dir]
 // --crop box = the cell box widened by --pad px; ink = widened by --pad, printed lines whitened, cut to the ink (inkTrimCrop).
 // Defaults = the phase 1 choice (paddle, stretch, ink, 4). --constrain (paddle only, phase 2): reading under the field type
 // (ctc.ts readField: pattern for dates/numbers/BP, best allowed value for enums); the free reading is kept beside it.
+// --variants adds the degraded images of the pages (data/degraded, make degrade --split tune), rectified like uploads
+// (as make predict does); the clean pages stay included.
 // Default pages: the 12 tune pages of layouts identification, pregnancy, delivery (page types 2-4 of the tune patients).
 // Cells are cut from the MASKED page (maskPage first), like crop.ts. Output: one JSONL record per cell + a summary.
 // Never run on calibrate/verify; the real photo is report-only (labels by hand, never tuned on).
@@ -15,6 +17,7 @@ import { parseArgs } from 'node:util';
 import { loadPageSchema } from '@care-agent/schema/node';
 import { loadCellBoxes, loadLayoutImage, pagePngPath, realPhotoPath, repoRoot } from '../../apps/server/src/cli/pages.ts';
 import { maskPage } from '../../apps/server/src/vision/crop.ts';
+import { rectify } from '../../apps/server/src/vision/rectify.ts';
 import { cellHasInk, checkboxInkRatio, inkRatio } from '../../apps/server/src/vision/ink.ts';
 import { cellCrop, inkTrimCrop, prepCrop } from '../../apps/server/src/vision/readers/common.ts';
 import { greedy, readField } from '../../apps/server/src/vision/readers/ctc.ts';
@@ -30,7 +33,9 @@ const { values } = parseArgs({
     prep: { type: 'string', default: 'stretch' },
     crop: { type: 'string', default: 'ink' },
     pad: { type: 'string', default: '4' },
+    'margin-x': { type: 'string', default: '8' },
     constrain: { type: 'boolean', default: false },
+    variants: { type: 'string' },
     out: { type: 'string', default: resolve(repoRoot, 'eval-results') },
   },
 });
@@ -43,11 +48,20 @@ const pageNos = values['page-nos']
   : [...tune].filter((no) => [2, 3, 4].includes(gt[no].page_type)).sort((a, b) => a - b);
 for (const no of pageNos) if (!tune.has(no)) throw new Error(`page ${no} is not in the tune split (never tune on calibrate/verify)`);
 
-const jobs = pageNos.map((no) => ({ id: String(no), layout: gt[no].layout, path: pagePngPath(no), slots: gt[no].slots }));
+const jobs = pageNos.map((no) => ({ id: String(no), variant: 'clean', layout: gt[no].layout, path: pagePngPath(no), slots: gt[no].slots }));
+if (values.variants) {
+  const manifest = JSON.parse(await readFile(resolve(repoRoot, 'data/degraded/manifest.json'), 'utf8'));
+  const wanted = values.variants === 'all' ? null : new Set(values.variants.split(','));
+  for (const e of manifest.variants) {
+    if (!pageNos.includes(e.page_no) || (wanted && !wanted.has(e.variant))) continue;
+    if (e.group !== 'tune') throw new Error(`variant ${e.file} is not a tune page (leakage)`);
+    jobs.push({ id: `${e.page_no}/${e.variant}`, variant: e.variant, layout: gt[e.page_no].layout, path: resolve(repoRoot, 'data/degraded', e.file), slots: gt[e.page_no].slots });
+  }
+}
 if (values.real) {
   const labels = JSON.parse(await readFile(join(here, 'data/real_photos_labels.json'), 'utf8'));
   const slots = labels.photos[`${values.real}.jpg`].fields.filter((s) => s.value !== '?' && s.value !== null);
-  jobs.push({ id: values.real, layout: 'real_cover', path: realPhotoPath(values.real), slots, real: true });
+  jobs.push({ id: values.real, variant: 'real', layout: 'real_cover', path: realPhotoPath(values.real), slots, real: true });
 }
 
 const makers = {
@@ -74,9 +88,10 @@ for (const name of values.readers.split(',')) {
     const boxes = loadCellBoxes(job.layout);
     const fields = new Map(schema.fields.map((f) => [f.id, f]));
     const tPage = performance.now();
-    const page = await loadLayoutImage(job.path, job.layout);
+    // like make predict: variants are rectified like uploads, clean specimens are read as they are
+    const page = job.variant === 'clean' || job.real ? await loadLayoutImage(job.path, job.layout) : await rectify(await loadLayoutImage(job.path, job.layout));
     const masked = maskPage(page, schema.masks);
-    const s = { reader: name, page: job.id, layout: job.layout, real: !!job.real, text_ne: [0, 0], text_e: [0, 0], cb_ne: [0, 0], cb_e: [0, 0], read_ms: 0, cells_read: 0 };
+    const s = { reader: name, page: job.id, variant: job.variant, layout: job.layout, real: !!job.real, text_ne: [0, 0], text_e: [0, 0], cb_ne: [0, 0], cb_e: [0, 0], read_ms: 0, cells_read: 0 };
     const lines = [];
     for (const slot of job.slots) {
       const f = fields.get(slot.key);
@@ -93,7 +108,7 @@ for (const name of values.readers.split(',')) {
       const ink = inkRatio(page, box.bbox_frac);
       let reading = null;
       if (cellHasInk(ink, 'text', job.layout)) {
-        const crop = values.crop === 'ink' ? inkTrimCrop(masked, box.bbox_frac, pad) : cellCrop(masked, box.bbox_frac, pad);
+        const crop = values.crop === 'ink' ? inkTrimCrop(masked, box.bbox_frac, pad, 4, 140, 40, 45, 32, Number(values['margin-x'])) : cellCrop(masked, box.bbox_frac, pad);
         if (values.constrain) {
           if (!reader.frames) throw new Error('--constrain needs the paddle reader');
           const t = performance.now();
@@ -108,11 +123,11 @@ for (const name of values.readers.split(',')) {
       const predicted = reading?.text ?? '';
       const ok = isCorrect(slot, predicted);
       const okFree = isCorrect(slot, reading?.free ?? predicted);
-      cellRows.push({ reader: name, layout: job.real ? 'real_cover (photo)' : job.layout, type: typeKey(f), nonEmpty, ok, okFree });
+      cellRows.push({ reader: name, layout: job.real ? 'real_cover (photo)' : job.variant === 'clean' ? job.layout : `${job.layout} (variants)`, type: typeKey(f), nonEmpty, ok, okFree });
       const b = nonEmpty ? s.text_ne : s.text_e;
       b[0]++; b[1] += +ok;
       lines.push(JSON.stringify({
-        reader: name, page: job.id, layout: job.layout, real: !!job.real, key: slot.key, type: f.type, category: f.category,
+        reader: name, page: job.id, variant: job.variant, layout: job.layout, real: !!job.real, key: slot.key, type: f.type, category: f.category,
         truth: slot.value, ink: +ink.toFixed(4), read: !!reading, reading: reading?.text ?? null, ok,
         steps: reading?.steps.map((st) => ({ t: st.text, p: +st.p.toFixed(4), alt: st.alt, pa: st.p_alt === undefined ? undefined : +st.p_alt.toFixed(4) })),
         seq_logprob: reading ? +reading.seq_logprob.toFixed(4) : null, ms: reading ? +reading.ms.toFixed(1) : 0,
@@ -137,7 +152,7 @@ const pc = ([n, k]) => (n ? `${((100 * k) / n).toFixed(1)}% (${k}/${n})` : 'n/a'
 console.log('\nreader       layout          handwritten(all)       handwritten(text)      blank(all)        ms/cell  s/page');
 const groups = new Map();
 for (const s of summary) {
-  const k = `${s.reader}|${s.real ? 'real_cover (photo)' : s.layout}`;
+  const k = `${s.reader}|${s.real ? 'real_cover (photo)' : s.variant === 'clean' ? s.layout : `${s.layout} (variants)`}`;
   const g = groups.get(k) ?? { ne: [0, 0], tne: [0, 0], e: [0, 0], ms: 0, cells: 0, pages: 0, page_s: 0 };
   g.ne = add(g.ne, add(s.text_ne, s.cb_ne)); g.tne = add(g.tne, s.text_ne); g.e = add(g.e, add(s.text_e, s.cb_e));
   g.ms += s.read_ms; g.cells += s.cells_read; g.pages++; g.page_s += s.page_s;

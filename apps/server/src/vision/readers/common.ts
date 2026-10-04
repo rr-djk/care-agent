@@ -42,11 +42,12 @@ export function cellCrop(masked: PageImage, [fx0, fy0, fx1, fy1]: BBoxFrac, pad:
 /**
  * Tight crop around the handwriting: the cell box widened by `expand` px (page skew clips the first/last letters of a
  * plain box crop), printed lines whitened (horizontal dark runs >= `runH` px, vertical >= `runV` px: handwriting strokes
- * at 200 dpi stay under ~30 px, grid lines and underlines are longer), then cut to the remaining ink plus `margin`, and
+ * at 200 dpi stay under ~30 px, grid lines and underlines are longer), then cut to the remaining ink plus `margin` (and
+ * `marginX` left and right: blur lightens stroke ends, a tight cut drops the last letter, "RAS" read "RA"), and
  * at least `minH` px high (paper added above and below: a lone "—" filling the whole crop is not read as a dash).
  * Falls back to the plain box when no ink is left.
  */
-export function inkTrimCrop(masked: PageImage, bbox: BBoxFrac, expand: number, margin = 4, inkLuma = 140, runH = 40, runV = 45, minH = 32): PageImage {
+export function inkTrimCrop(masked: PageImage, bbox: BBoxFrac, expand: number, margin = 4, inkLuma = 140, runH = 40, runV = 45, minH = 32, marginX = 8): PageImage {
   const c = cellCrop(masked, bbox, expand);
   const { width: w, height: h } = c;
   const dark = new Uint8Array(w * h);
@@ -95,8 +96,8 @@ export function inkTrimCrop(masked: PageImage, bbox: BBoxFrac, expand: number, m
   const y0 = best.y0, y1 = best.y1;
   for (let y = y0; y <= y1; y++) for (let x = 0; x < w; x++) if (ink[y * w + x]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
   if (x1 < 0) return cellCrop(masked, bbox, 0);
-  const cx0 = Math.max(0, x0 - margin), cy0 = Math.max(0, y0 - margin);
-  const cw = Math.min(w, x1 + margin + 1) - cx0, ch = Math.min(h, y1 + margin + 1) - cy0;
+  const cx0 = Math.max(0, x0 - marginX), cy0 = Math.max(0, y0 - margin);
+  const cw = Math.min(w, x1 + marginX + 1) - cx0, ch = Math.min(h, y1 + margin + 1) - cy0;
   const outH = Math.max(ch, minH);
   const top = (outH - ch) >> 1;
   const data = Buffer.alloc(cw * outH * 3);

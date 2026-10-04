@@ -79,3 +79,11 @@ test('a pattern reading that fails the validators gives way to the next probable
   assert.equal(r.text, '20/01/2026');
   assert.ok(r.rank! > 0);
 });
+
+test('the greedy reading is kept when it fits the pattern, even if CTC sums favour a merged one', () => {
+  // two "1" with a faint blank between them: greedy reads "02/11/2025"; summed over alignments "02/1/2025" can win
+  const f = frames([...spell('02/'), { '1': 0.86 }, { '1': 0.23 }, { '1': 0.63 }, '_', ...spell('/2025')]);
+  const r = readField(f, field({ type: 'date', validators: ['date'] }));
+  assert.equal(r.text, '02/11/2025');
+  assert.ok(r.runner_up, 'the merged reading is the runner-up');
+});
