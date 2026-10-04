@@ -1,4 +1,0 @@
-Crop of a French maternity record. Answer {"cells":[...]} with exactly 21 values, row-major.
-Table rows: Poids (kg); TA; Anomalies squelette; État des conjonctives; Examen des seins; Œdèmes; Mouvements actifs
-Columns: T1 V1; T1 V2; T1 V3
-Copy handwriting verbatim. "" = empty, null only if there is writing you cannot read at all. Never invent a value. Ignore names, ID numbers, phone numbers, addresses.
