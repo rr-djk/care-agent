@@ -83,18 +83,20 @@ The first line says `pages=p1,p2,p3,p4,p5,p6,p7,p8 (80 pages, ...)`. Every cell 
 Needs Ollama running with `gemma4:e4b`.
 
 ```
-npm run analyze -w @care-agent/server -- 19 --zones p03.visits.r1c1
+npm run analyze -w @care-agent/server -- 19 --zones p03.visits.r1c1,p03.visits.r2c1
 ```
 
-Page 19 is patient 3's pregnancy page; `p03.visits.r1c1` is the top-left block of the visit table (rows Rendez-vous to État des conjonctives, 1st-trimester visits; see `docs/zones-p03.png`). Output (excerpt):
+Page 19 is patient 3's pregnancy page. The visit table is cut in 7 row groups that never cross a dark section band (`docs/zones-p03.png`): `p03.visits.r1c1` = the 4 first rows (Rendez-vous to Age probable), `p03.visits.r2c1` = the next 7 (Poids to Mouvements actifs), both for the 1st-trimester visits. Output (excerpt):
 
 ```
 zone               field                              verbatim       status         ink
 p03.visits.r1c1    p03.rendez_vous.v1_t1              "03/07/2025"   KNOWN          0.0200
 p03.visits.r1c1    p03.rendez_vous.v2_t1              ""             NOT_PROVIDED   0.0000
 ...
-p03.visits.r1c1    p03.poids_kg.v1_t1                 "51,6"         KNOWN          0.0213
-  -> p03.visits.r1c1: prefill 17.4 s (342 tok), gen 5.0 s (66 tok), wall 23.0 s
+  -> p03.visits.r1c1: prefill 10.9 s (223 tok), gen 3.5 s (41 tok), wall 14.4 s
+p03.visits.r2c1    p03.poids_kg.v1_t1                 "51.6"         KNOWN          0.0213
+p03.visits.r2c1    p03.examen_des_seins.v1_t1         "Normaux"      KNOWN          0.0137
+  -> p03.visits.r2c1: prefill 12.9 s (269 tok), gen 3.3 s (40 tok), wall 16.2 s
 ```
 
 How to read it:
@@ -103,7 +105,7 @@ How to read it:
 - `ink` = share of ink pixels in the cell: `0.0000` means empty paper, so the model is not even asked.
 - `prefill` = time to read the image, `gen` = time to write the answer, `wall` = total.
 
-Success: the 8 visit-1 values `03/07/2025`, `05/06/2025`, `Non`, `8 SA`, `51,6`, `104/78`, `RAS`, `Normales` are `KNOWN` on the `v1_t1` rows, and the 16 other cells are `""` / `NOT_PROVIDED`. Run it again: the zone line ends with `[cache hit]` and `wall 0.0 s` (answers are cached in `data/cache/`, git-ignored). The key safety rule: a wrong value must never be `KNOWN` silently; e.g. on zone `p03.visits.r1c2` the model may read `8 17 SA` for `17 SA`, which must come out `NEEDS_REVIEW`.
+Success: the visit-1 values `03/07/2025`, `05/06/2025`, `Non`, `8 SA` (r1c1) and `51.6`, `104/78`, `RAS`, `Normales`, `Normaux`, `Non` (r2c1) are `KNOWN` on the `v1_t1` rows, and the other cells are `""` / `NOT_PROVIDED`. Run it again: the zone line ends with `[cache hit]` and `wall 0.0 s` (answers are cached in `data/cache/`, git-ignored). The key safety rule: a wrong value must never be `KNOWN` silently; e.g. on zone `p03.visits.r1c2` the model may read `8 17 SA` for `17 SA`, which must come out `NEEDS_REVIEW`.
 
 Check a reading yourself (what the model saw, what it was asked, what it answered):
 
@@ -116,7 +118,7 @@ It first prints the folder, `crops, prompts and answers -> .../care-agent/data/c
 Other useful runs:
 
 ```
-npm run analyze -w @care-agent/server -- 19          # whole page: 13 zones, ~8 minutes on CPU; totals on the last line
+npm run analyze -w @care-agent/server -- 19          # whole page: 22 zones, ~8 minutes on CPU; totals on the last line
 npm run analyze -w @care-agent/server -- 20          # delivery page: checkboxes come from ink (no model), only text is asked
 npm run ink-eval -w @care-agent/server               # ink detector vs ground truth on 80 pages, no model, ~1 min
 ```
@@ -178,15 +180,66 @@ npm run analyze -w @care-agent/server -- "/path/to/datasets/data/Paper Registry/
 make predict ARGS='--split tune --pages p3 --limit 1'
 ```
 
-Runs the full pipeline on the first pregnancy page of the `tune` patients and prints one line per page (`page 11 (pregnancy): 280 cells`), then `wrote .../eval-results/predictions-<time>.json`. Score it with that file name:
+Runs the full pipeline on the first pregnancy page of the `tune` patients and prints one line per page (`page 11 (pregnancy): 280 cells`), then `wrote .../eval-results/predictions-<time>.jsonl` (one JSON record per page: every field's status and signals, the gate metrics, timings; appended page by page, so a crash keeps what was read). Score it with that file name:
 
 ```
-make eval ARGS='--extractor eval-results/predictions-<time>.json --split tune --pages p3'
+make eval ARGS='--extractor eval-results/predictions-<time>.jsonl --split tune --pages p3'
 ```
 
-Same table as in section 2, now with real percentages. Look at `non-empty` (handwritten cells read correctly) and `empty` (blank cells correctly left empty, expected 100 %). Reference on the 12 `tune` pages (pages 2, 3, 4 of patients 2, 3, 4, 8), current prompt: non-empty **92.2 %** (identification 92.9 %, pregnancy 91.3 %, delivery 100 %), empty 100 % (the first run, before the prompt fix, gave 90.8 %). A full `tune` run takes about 1 hour on the CPU laptop; do not delete or switch the folder it runs from until it prints `wrote .../predictions-<time>.json` (results are only written at the end). Per-field results are in the JSON (`by_key`).
+Same table as in section 2, now with real percentages. Look at `non-empty` (handwritten cells read correctly) and `empty` (blank cells correctly left empty, expected 100 %). Reference on the 12 `tune` pages (pages 2, 3, 4 of patients 2, 3, 4, 8), current prompt: non-empty **92.2 %** (identification 92.9 %, pregnancy 91.3 %, delivery 100 %), empty 100 % (the first run, before the prompt fix, gave 90.8 %). A full `tune` run takes about 1 hour on the CPU laptop; the predictions file grows page by page. Per-field results of `make eval` are in its JSON report (`by_key`).
 
 Splits: `tune` (patients 2, 3, 4, 8), `calibrate` (1, 5, 7), `verify` (6, 9, 10). Everything generated stays in `eval-results/` and `data/` (git-ignored).
+
+#### Tuning experiment of step 13 (pregnancy zones)
+
+Baseline on tune page 27: glucosuria/albuminuria cells were read as empty (5 + 2 of 115 handwritten cells) and `Normaux` as `Normalux`, because the visit zones crossed the dark section bands. The visit table is now cut in 7 row groups that never cross a band (`PREGNANCY_ROW_GROUPS` in `tools/eval/zones.py`; 22 zones instead of 13). Same page, same cache, before/after: handwritten cells right **104/115 (90.4 %) -> 113/115 (98.3 %)**, blank cells 165/165 both, model time 127 s -> 521 s for the page. Details and the one regression in `docs/calibration.md`.
+
+#### Degraded variants, calibration, quality curve, report (step 13)
+
+Everything below writes to git-ignored folders only (`data/degraded/`, `data/calibration/`, `eval-results/`): check with `git check-ignore data/degraded data/calibration eval-results` (it must print the three paths). `make check` covers the code (no model); the commands here need Ollama only where marked. Protocol, signals and the decision rule: `docs/calibration.md`; the full runs and their durations: "Long runs" there.
+
+1. **Variants (no model, ~5 s per page for 7 variants).**
+
+   ```
+   make degrade ARGS='--split calibrate --pages p1 --limit 1 --variants blur-s2,jpeg-q30,glare'
+   ```
+
+   Expected: one line per variant (`page 1 (calibrate, patient 1) blur-s2 -> 1/blur-s2.png`) and `wrote .../data/degraded/manifest.json (3 variants of 1 pages)`. Look at: `data/degraded/1/*.png` (open one: blurred / compressed / glare blob) and `manifest.json` (each entry has `page_no`, `patient`, `group`: the group is always the source page's, the command refuses to write a manifest where it is not). Ids: `blur-s1|s2|s4`, `motion-15`, `dark-0.6|0.4`, `glare`, `jpeg-q30`, `down-0.5`, `persp-mild|strong`.
+
+2. **Predict with signals (model; ~1 min per cover page, variants included in the count).**
+
+   ```
+   make predict ARGS='--split calibrate --pages p1 --limit 1 --variants blur-s2,jpeg-q30'
+   ```
+
+   Expected: `page 1 clean (cover): 21 cells, gate OK, 0/3 zones from cache`, then `page 1 blur-s2 (cover): ... gate WARNING`, `page 1 jpeg-q30 ... gate OK`, then `wrote .../eval-results/predictions-<ts>.jsonl`. Look at the file: one JSON line per image with `variant`, `group`, `gate` (blur, isotropy, brightness, glare, framing, outcome, quality factor), `latency`, and per field `status`, `verbatim`, `value`, `category`, `signals` (agreement, validators_passed, ink, quality). `make eval ARGS='--extractor eval-results/predictions-<ts>.jsonl --split calibrate --pages p1'` still works (clean pages only). Options: `--page-nos 27,59`, `--no-clean`, `--variants all`, `--real 1-1 --limit 0` (the real photo alone).
+
+3. **Calibrate (no model).**
+
+   ```
+   make calibrate ARGS='--pred eval-results/predictions-<ts>.jsonl'
+   ```
+
+   Expected: the report on screen and `wrote .../data/calibration/table.json and .../report.md`. With only a few pages every category says `insufficient n (< 30)` or has few examples; that is expected and handled (no number, no demotion). Success on the real run: each category has `n` >= 30 in its reference bin, a Wilson interval, a `keep` / `DEMOTE` verdict and a doubt recall. Failure: `calibrate failed: record ... is in group "tune"` (a record of another split: only the calibrate split may fit the table) or `was read by another pipeline` (prompt, zones, ink thresholds or model changed since `make predict`: predict again).
+
+4. **Quality curve (no model).**
+
+   ```
+   make quality-curve ARGS='--pred eval-results/predictions-<ts>.jsonl'
+   ```
+
+   Expected: a table `variant | level | pages | cells | accuracy | clean (same pages) | change | OK/WARN/REJECT | blur | isotropy | brightness | glare ...` and, below, the first level where accuracy dropped. File: `eval-results/quality-curve-<ts>.md`. Look at the rows of one family: accuracy must fall as the level grows while the gate metric moves the same way; it informs `packages/quality/src/thresholds.ts`, which is NOT changed from a few pages (procedure in `docs/quality.md`).
+
+5. **Report (no model).**
+
+   ```
+   make predict ARGS='--split verify --pages p1 --limit 1 --real 1-1'     # model, ~1 min
+   make report ARGS='--pred eval-results/predictions-<ts>.jsonl'
+   ```
+
+   Expected: sections `Accuracy per layout`, `Status accuracy`, `Calibration per category`, `Doubt recall`, `Coverage against error`, `Latency per page`, `Clean specimens against the real photo` (the real photo: 14/21 fields right, the five checkbox false positives and the silent errors `164125` / `CIS Sidi Smail` listed), written to `eval-results/report-<ts>.md`; `--publish` also copies it to `docs/results.md`. The table `data/calibration/table.json` is applied when its `pipeline_hash` equals the predictions' (the header says `applied` or `REFUSED`). Failure: `the report takes verify pages only`.
+
+6. **The server uses the table.** `make server` logs one line at start: `calibration: no table at .../data/calibration/table.json` (not calibrated yet), `calibration: table ignored, pipeline_hash ... != current ...` (stale table, refused) or nothing when the table is loaded. A KNOWN field of a demoted category arrives as `NEEDS_REVIEW` with `reason: low_category_confidence` (« ... ce type de champ est difficile à lire pour moi »), and `calibrated` / `calibration` are set on the stored field. In the review card the optional **Détails** link shows « confiance estimée 91 % [86-94 %] sur 240 exemples » (audit/jury only; the card never shows a percentage otherwise).
 
 ### 5. Run the app on the laptop (browser)
 
@@ -400,4 +453,4 @@ The three sessions above, driven by Playwright against `ANALYZER=ink` server + `
 - Only pages 1 to 4 have schemas so far (cover, identification, pregnancy, delivery).
 - Linking: the supervisor reads the duplicates list but the midwife settles them (the supervisor is read-only); the PWA has no screen for a parked session yet (API only); the candidate search scans all patients (fine for a demo, not for thousands); a page added to a session after its link decision cannot be linked (start a new session).
 - Offline, only captures are queued; reviewing (corrections, confirmations) needs the server.
-- Quality thresholds are provisional (recalibrated in step 13); an open booklet is detected as one big quad (the spread), the single-page crop is not done yet.
+- Quality thresholds are provisional (step 13 ships the quality-curve script, the decision waits for the full runs); an open booklet is detected as one big quad (the spread), the single-page crop is not done yet.
