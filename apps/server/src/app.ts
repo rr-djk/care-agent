@@ -229,7 +229,7 @@ export function createApp({ db, originals, events, worker, model, inkOnly, chatM
     return c.json(proposalFor(db, id));
   });
 
-  // by session (its cover reading or what the midwife typed, plus age/LMP/gravidity/parity/province) or by typed fiche + facility
+  // by session (its cover reading or what the midwife typed, plus age/LMP/gravidity/parity/province) or by typed fiche (+ optional facility)
   app.get('/api/patients/candidates', (c) => {
     const user = c.get('user');
     const { session_id, fiche, facility } = c.req.query();
@@ -237,8 +237,8 @@ export function createApp({ db, originals, events, worker, model, inkOnly, chatM
       ownSession(user, session_id);
       return c.json(proposalFor(db, session_id));
     }
-    if (!fiche?.trim() || !facility?.trim()) throw new ApiError(400, 'bad_request', 'query needs session_id, or fiche and facility');
-    return c.json(proposalForKey(db, fiche, facility));
+    if (!fiche?.trim()) throw new ApiError(400, 'bad_request', 'query needs session_id, or fiche (and optionally facility)');
+    return c.json(proposalForKey(db, fiche, facility?.trim() || undefined));
   });
 
   app.get('/api/patients/:id', (c) => c.json(patientRecord(db, c.get('user'), c.req.param('id'))));

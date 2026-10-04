@@ -645,7 +645,9 @@ test('linking: a session with an unreadable fiche types it; a doubtful reading i
   assert.equal((await t.call('sf-01', `/api/patients/candidates?fiche=2026-711-003&facility=DR%20Tahannaout%20Sud`)).status, 200);
   const byKey = await (await t.call('sf-01', '/api/patients/candidates?fiche=2026-711-003&facility=dr%20tahannaout%20sud')).json();
   assert.deepEqual([byKey.question, byKey.candidates[0].patient_id], ['propose', 'PAT-000001']);
-  assert.equal((await t.call('sf-01', '/api/patients/candidates?fiche=x')).status, 400);
+  assert.equal((await t.call('sf-01', '/api/patients/candidates?facility=x')).status, 400); // no fiche
+  const codeOnly = await (await t.call('sf-01', '/api/patients/candidates?fiche=2026-711-003')).json(); // the code alone is a key
+  assert.deepEqual([codeOnly.question, codeOnly.facility, codeOnly.candidates[0].patient_id], ['propose', null, 'PAT-000001']);
 
   const doubtful = await validatedSession(t, readings, { 1: COVER('2O26-711-OO3'), 2: IDENT });
   const dq = await candidates(t, doubtful.sid);
@@ -668,6 +670,19 @@ test('linking: a session with an unreadable fiche types it; a doubtful reading i
   assert.equal((await t.call('sf-01', `/api/sessions/${base.sid}`, { method: 'PATCH', ...t.json({ fiche_number: '1' }) })).status, 409); // already linked
 });
 
+test('linking: a code alone creates a patient without facility, a later visit with a facility finds it', async () => {
+  const { readings, analyzer } = linkSetup();
+  const t = await setup(analyzer);
+  const first = await validatedSession(t, readings, { 1: [['p01.n_deg_de_la_fiche', '2026-711-003']], 2: IDENT });
+  const q = await candidates(t, first.sid);
+  assert.deepEqual([q.question, q.facility, q.candidates], ['create', null, []]);
+  const created = await (await link(t, 'sf-01', first.sid, { kind: 'create_new' })).json();
+  assert.deepEqual([created.status, created.patient.id, created.patient.facility], ['linked', 'PAT-000001', '']);
+  const later = await validatedSession(t, readings, { 1: COVER('2026-711-003'), 2: IDENT });
+  const lq = await candidates(t, later.sid);
+  assert.deepEqual([lq.question, lq.candidates[0].patient_id, lq.candidates[0].kind], ['propose', 'PAT-000001', 'exact']);
+});
+
 test('linking: not ready, bad body, missing key, access to the record by role', async () => {
   const { readings, analyzer } = linkSetup();
   const t = await setup(analyzer);
@@ -684,8 +699,8 @@ test('linking: not ready, bad body, missing key, access to the record by role', 
 
   const empty = await t.newSession(); // typed fiche '12' but no facility, no page
   assert.equal((await link(t, 'sf-01', empty, { kind: 'create_new' })).status, 409);
-  const noFacility = await validatedSession(t, readings, { 1: [['p01.n_deg_de_la_fiche', '2026-111-001']] });
-  const res = await link(t, 'sf-01', noFacility.sid, { kind: 'create_new' });
+  const noFiche = await validatedSession(t, readings, { 1: [['p01.province', 'Al Haouz']] });
+  const res = await link(t, 'sf-01', noFiche.sid, { kind: 'create_new' });
   assert.deepEqual([res.status, (await res.json()).code], [409, 'link_key_missing']);
   assert.equal(t.count('patients'), 0);
 

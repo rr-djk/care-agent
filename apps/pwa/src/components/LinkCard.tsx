@@ -27,7 +27,7 @@ export function LinkCard({ proposal, active, offline, onDecide, onSetKey }: Prop
     <div className="link-card">
       <p className="item-text">{proposal.text_fr}</p>
       {proposal.fiche.value && proposal.question !== 'confirm_fiche' && (
-        <p className="hint">N° de la fiche : {proposal.fiche.value} · {proposal.facility ?? 'établissement inconnu'}</p>
+        <p className="hint">N° de la fiche : {proposal.fiche.value}{proposal.facility ? ` · ${proposal.facility}` : ''}</p>
       )}
       {proposal.candidates.length > 0 && (
         <ul className="candidates">
@@ -35,7 +35,7 @@ export function LinkCard({ proposal, active, offline, onDecide, onSetKey }: Prop
             <li key={c.patient_id} className={c.consistent ? '' : 'inconsistent'}>
               <strong>Patient {i + 1} · {c.patient_id}</strong>
               <span>
-                Fiche {c.summary.fiche_number} · {c.summary.facility}
+                Fiche {c.summary.fiche_number}{c.summary.facility && ` · ${c.summary.facility}`}
                 {c.summary.age !== undefined && ` · ${c.summary.age} ans`}
                 {c.summary.ddr && ` · DDR ${c.summary.ddr}`} · {c.summary.visits} visite{c.summary.visits > 1 ? 's' : ''}
                 {c.summary.last_visit && ` · dernière le ${dateFr(c.summary.last_visit)}`}
@@ -48,7 +48,7 @@ export function LinkCard({ proposal, active, offline, onDecide, onSetKey }: Prop
       {active && typing && (
         <div className="item-edit">
           <input value={fiche} onChange={(e) => setFiche(e.target.value)} placeholder="N° de la fiche" aria-label="N° de la fiche" />
-          {proposal.question === 'need_key' && <input value={facility} onChange={(e) => setFacility(e.target.value)} placeholder="Établissement" aria-label="Établissement" />}
+          {proposal.question === 'need_key' && <input value={facility} onChange={(e) => setFacility(e.target.value)} placeholder="Établissement (facultatif)" aria-label="Établissement (facultatif)" />}
           <div className="item-actions">
             <button className="primary" onClick={submit} disabled={offline}>Valider</button>
           </div>

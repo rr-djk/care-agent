@@ -112,9 +112,9 @@ export function proposalFor(db: Db, sessionId: string): LinkProposal {
   return propose(sessionId, sessionKey(db, session), knownPatients(db));
 }
 
-/** The same question for a typed (fiche, facility), without a session: no cross-check attributes. */
-export const proposalForKey = (db: Db, fiche: string, facility: string): LinkProposal =>
-  propose('', { fiche, facility, source: 'typed', attrs: {} }, knownPatients(db));
+/** The same question for a typed fiche (and facility, optional), without a session: no cross-check attributes. */
+export const proposalForKey = (db: Db, fiche: string, facility?: string): LinkProposal =>
+  propose('', { fiche, facility: facility ?? null, source: 'typed', attrs: {} }, knownPatients(db));
 
 // --- decision ------------------------------------------------------------------------------------------------
 
@@ -166,7 +166,7 @@ export function linkSession(db: Db, user: AuthUser, sessionId: string, decision:
     if (!known) throw new ApiError(404, 'patient_not_found', 'unknown patient');
   }
   const key = decision.kind === 'create_new' ? sessionKey(db, session) : undefined;
-  if (key && (!key.fiche || !key.facility)) throw new ApiError(409, 'link_key_missing', 'the fiche number and the facility are required to create a patient');
+  if (key && !key.fiche) throw new ApiError(409, 'link_key_missing', 'the fiche number is required to create a patient');
 
   const now = new Date().toISOString();
   return db.transaction((): LinkResult => {
@@ -174,7 +174,7 @@ export function linkSession(db: Db, user: AuthUser, sessionId: string, decision:
     if (key) {
       db.prepare("INSERT INTO counters (id, value) VALUES ('patient', 1) ON CONFLICT (id) DO UPDATE SET value = value + 1").run();
       const n = (db.prepare("SELECT value FROM counters WHERE id = 'patient'").get() as { value: number }).value;
-      patient = { id: patientId(n), fiche_number: key.fiche!, facility: key.facility!, created_at: now };
+      patient = { id: patientId(n), fiche_number: key.fiche!, facility: key.facility ?? '', created_at: now }; // no facility known: empty, never a guess
       db.prepare('INSERT INTO patients (id, fiche_number, facility, created_at) VALUES (?, ?, ?, ?)').run(patient.id, patient.fiche_number, patient.facility, now);
     }
     db.prepare('INSERT OR REPLACE INTO session_links (session_id, patient_id, decision, decided_by, decided_at) VALUES (?, ?, ?, ?, ?)').run(
