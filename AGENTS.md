@@ -1,5 +1,29 @@
 # AGENTS.md
 
+## Current state and next action (read first — updated Oct 3, 2026)
+
+- `main` holds build steps 1–13 (see "Build progress" in `docs/Care_Agent-Dev_Plan.md`). Step 13 tooling is merged; its **full evaluation runs have NOT been done yet**. Step 14 (final docs, hardening, demo script, video fallback) has not started.
+- **Next action, before anything else: the long evaluation runs.** They are run by the user (not by an agent: hours of CPU), in the worktree `../care-agent-eval` (a detached checkout of `main` with its own `node_modules`; do not delete it or switch its branch during a run). If you are an agent starting a session: remind the user of this first, give them the commands below, and wait for them to say the runs are finished; then read the outputs yourself (they are on this machine).
+- Commands, in a separate terminal, one after another, Ollama running (`curl -s localhost:11434/api/version` prints a version), nothing else heavy open (~3 h total):
+
+  ```
+  cd ../care-agent-eval            # from the care-agent repo root
+  git status                       # must say "HEAD detached at ..." on the latest main; else: git fetch && git checkout --detach origin/main && npm ci
+  make degrade ARGS='--split calibrate --pages p4,p6 --variants blur-s1,blur-s2,blur-s4,dark-0.6,glare,jpeg-q30'   # ~1 min, no model
+  make predict ARGS='--split calibrate --variants blur-s1,blur-s2,blur-s4,dark-0.6,glare,jpeg-q30' 2>&1 | tee eval-results/run-calibrate.log   # ~2 h
+  CAL=$(ls -t eval-results/predictions-*.jsonl | head -1); echo "$CAL"
+  make calibrate ARGS="--pred $CAL"          # seconds -> data/calibration/table.json + report.md
+  make quality-curve ARGS="--pred $CAL"      # seconds
+  make predict ARGS='--split verify --real 1-1' 2>&1 | tee eval-results/run-verify.log   # ~50 min
+  VER=$(ls -t eval-results/predictions-*.jsonl | head -1); echo "$VER"
+  make report ARGS="--pred $VER"             # seconds -> eval-results/report-<time>.md
+  ```
+
+  A run is complete only when it prints `wrote .../predictions-<time>.jsonl`. `calibrate failed: ... read by another pipeline` means the code changed between predict and calibrate (prompts, zones, ink thresholds or model): do not change those before or during the runs.
+- **After the runs** (agent work): read `data/calibration/report.md`, the quality-curve output and `eval-results/report-*.md` in `../care-agent-eval`; set the gate thresholds in `packages/quality/src/thresholds.ts` only if the curve justifies it (procedure in `docs/quality.md`); copy `data/calibration/table.json` into the repo's `data/calibration/` for the server (git-ignored, it stays local); publish the verify report as `docs/results.md` (`make report ARGS="--pred <verify file> --publish"`); update README, this file and the Build progress table; then start step 14.
+- Known measured numbers so far: tune split (12 pages) 92.2 % of handwritten cells right, 100 % of blank cells left blank; a finer pregnancy zone cut reached 98.3 % on one page at 4x the time and was not kept (`docs/scaling.md`).
+- Open items for humans: phone test over HTTPS (README section 6, owner: a teammate); delete merged branches (the hook blocks agents from deleting branches: give the user `git branch -d ...` / `git push origin --delete ...` commands).
+
 ## Commands (use Make, not bare npm)
 
 - `make check` — dataset guard + typecheck (schema, quality, server, pwa) + all tests (schema, quality, server, pwa, tools, python). Run before merging.

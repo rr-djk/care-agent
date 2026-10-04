@@ -27,6 +27,8 @@ Decisions taken since this plan was written: Vite + React for the PWA, Hono for 
 
 What exists today: see the README "How to test" (commands, expected outputs) and `AGENTS.md` (layout, invariants, gotchas). In short, `main` runs end to end on a laptop: capture in the PWA (offline queue included) → upload → crop + ink + Gemma 4 → statuses → conversational review → validated page.
 
+Next action: the step 13 long evaluation runs, run by a human in `../care-agent-eval` (commands at the top of `AGENTS.md` and in `docs/calibration.md`), then step 14.
+
 Open items for the team:
 
 - Phone test over HTTPS: step-by-step guide in README section 6 (mkcert, trusting the CA on Android/iPhone, firewall, checklist, troubleshooting). Owner: a teammate. Not done yet.
