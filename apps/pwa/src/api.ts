@@ -1,4 +1,4 @@
-import type { Difference, ExtractedField, LinkDecision, LinkProposal, LinkResult, PatientRecord, RecordPage, ReviewQueue, Role, Session } from '@care-agent/schema';
+import type { Aggregates, Difference, ExtractedField, LinkDecision, LinkProposal, LinkResult, PatientRecord, RecordPage, ReviewQueue, Role, Session } from '@care-agent/schema';
 import { ApiError } from './errors';
 import * as fixtures from './fixtures';
 import { netBlocked, setReachable } from './offline/network';
@@ -123,6 +123,18 @@ const live = {
   },
   async getPatient(id: string): Promise<PatientRecord> {
     return (await request(`/patients/${encodeURIComponent(id)}`)).json();
+  },
+  /** Supervisor: anonymized aggregates of the linked records, and of the synthetic reference dataset (null when absent). */
+  async getStats(): Promise<Aggregates> {
+    return (await request('/stats')).json();
+  },
+  async getReferenceStats(): Promise<Aggregates | null> {
+    try {
+      return await (await request('/stats/reference')).json();
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) return null;
+      throw e;
+    }
   },
 };
 

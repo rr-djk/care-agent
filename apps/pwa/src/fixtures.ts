@@ -1,7 +1,7 @@
 // VITE_FIXTURES=1: canned API for building and testing the UI without the server or the model.
 // Demo: the 1st page has one doubt and one illegible field; the 2nd fails (AI unavailable) and goes to manual entry;
 // a retake gives a clean page. Rules are canned (the real ones live on the server).
-import type { Difference, ExtractedField, LinkDecision, LinkProposal, LinkResult, PatientRecord, RecordPage, ReviewItem, ReviewQueue, Session, Status } from '@care-agent/schema';
+import type { Aggregates, Difference, ExtractedField, LinkDecision, LinkProposal, LinkResult, PatientRecord, RecordPage, ReviewItem, ReviewQueue, Session, Status } from '@care-agent/schema';
 import type { Auth, FieldEdit, FieldResult } from './api';
 import { ApiError } from './errors';
 import { fieldDef, fieldLabel } from './schemas';
@@ -102,7 +102,7 @@ export const api = {
   async login(user_id: string, pin: string): Promise<Auth> {
     await delay(200);
     if (pin !== '123456') fail('invalid_credentials', 'invalid credentials');
-    return { token: 'fixture', role: 'midwife', userId: user_id };
+    return { token: 'fixture', role: user_id.startsWith('sup') ? 'supervisor' : 'midwife', userId: user_id }; // sup-01 opens the dashboard
   },
   async createSession(session: Session): Promise<Session> {
     if (session.id !== sessionId) {
@@ -220,5 +220,19 @@ export const api = {
       visits: [{ session_id: sessionId, date: now, pages: pages.map((p) => ({ page_id: p.id, page_type: p.type, captured_at: now, state: p.state })) }],
       values: [{ page_type: 3, field_id: 'p03.ddr', label_fr: 'DDR', value: '12/03/2026', source_page_id: pages[0]?.id ?? '', source_date: now }],
     };
+  },
+  async getStats(): Promise<Aggregates> {
+    const bins = (labels: string[], counts: (number | null)[]) => labels.map((label_fr, k) => ({ label_fr, count: counts[k] }));
+    return {
+      source: 'records',
+      source_fr: 'Dossiers validés et reliés (exemple)',
+      blocks: [
+        { id: 'bp_systolic', title_fr: 'Tension artérielle systolique (mmHg)', n: 40, bins: bins(['< 120', '120 à 139', '140 à 159', '≥ 160'], [18, 15, 7, null]) },
+        { id: 'hiv', title_fr: 'Sérologie VIH', n: 30, bins: bins(['Négatif', 'Positif'], [30, 0]) },
+      ],
+    };
+  },
+  async getReferenceStats(): Promise<Aggregates | null> {
+    return null;
   },
 };

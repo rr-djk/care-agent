@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { readFileSync, mkdtempSync, readdirSync } from 'node:fs';
+import { readFileSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -26,7 +26,7 @@ const field = (field_id: string, status: ExtractedField['status'], value: string
 const FIELDS = [field('a', 'KNOWN'), field('b', 'NEEDS_REVIEW'), field('c', 'ILLEGIBLE', null)];
 const okAnalyzer: Analyzer = async () => FIELDS;
 
-async function setup(analyzer: Analyzer | null = okAnalyzer, opts: { ink?: Analyzer; inkOnly?: boolean; chatModel?: ChatModelFn } = {}) {
+async function setup(analyzer: Analyzer | null = okAnalyzer, opts: { ink?: Analyzer; inkOnly?: boolean; chatModel?: ChatModelFn; referenceCsv?: string } = {}) {
   const dataDir = mkdtempSync(join(tmpdir(), 'care-agent-test-'));
   process.env.ORIGINALS_KEY = 'ab'.repeat(32);
   const db = openDb(dataDir);
@@ -46,7 +46,7 @@ async function setup(analyzer: Analyzer | null = okAnalyzer, opts: { ink?: Analy
     jobs.push(job.catch(() => {})); // upload in ink mode fires it without awaiting
     return job;
   };
-  const app = createApp({ db, originals, events, worker, model: 'fake', inkOnly: opts.inkOnly, chatModel: opts.chatModel });
+  const app = createApp({ db, originals, events, worker, model: 'fake', inkOnly: opts.inkOnly, chatModel: opts.chatModel, referenceCsv: opts.referenceCsv });
   const pins = Object.fromEntries(seedUsers(db, dataDir).map((u) => [u.id, u.pin]));
 
   const tokens: Record<string, string> = {};
@@ -681,6 +681,28 @@ test('linking: a code alone creates a patient without facility, a later visit wi
   const later = await validatedSession(t, readings, { 1: COVER('2026-711-003'), 2: IDENT });
   const lq = await candidates(t, later.sid);
   assert.deepEqual([lq.question, lq.candidates[0].patient_id, lq.candidates[0].kind], ['propose', 'PAT-000001', 'exact']);
+});
+
+test('stats: supervisor only, linked pages only, small cells hidden, no id in the answer; the reference file is optional', async () => {
+  const { readings, analyzer } = linkSetup();
+  const dir = mkdtempSync(join(tmpdir(), 'ref-'));
+  const csv = join(dir, 'ref.csv');
+  writeFileSync(csv, 'id,mean systolic bp (mmhg),hiv test result\n1,110,0\n2,150,1\n');
+  const t = await setup(analyzer, { referenceCsv: csv });
+  const s = await validatedSession(t, readings, { 1: COVER('2026-711-003'), 3: [['p03.ta.v1_t1', '125/80'], ['p03.serologie_vih.v1_t1', 'Neg']] });
+  assert.equal((await t.call('sf-01', '/api/stats')).status, 403);
+  assert.equal((await t.call('sf-01', '/api/stats/reference')).status, 403);
+  const before = await (await t.call('sup-01', '/api/stats')).json();
+  assert.equal(before.blocks.find((b: { id: string }) => b.id === 'bp_systolic').n, 0); // VALIDATED is not linked yet
+  await link(t, 'sf-01', s.sid, { kind: 'create_new' });
+  const after = await (await t.call('sup-01', '/api/stats')).json();
+  const sys = after.blocks.find((b: { id: string }) => b.id === 'bp_systolic');
+  assert.deepEqual([after.source, sys.n, sys.bins.map((b: { count: number | null }) => b.count)], ['records', 1, [0, null, 0, 0]]); // 1 reading: hidden
+  assert.ok(!/PAT-|p03\.|2026-711/.test(JSON.stringify(after)));
+  const ref = await (await t.call('sup-01', '/api/stats/reference')).json();
+  assert.deepEqual([ref.source, ref.blocks.find((b: { id: string }) => b.id === 'hiv').n], ['reference', 2]);
+  const none = await setup(analyzer);
+  assert.equal((await none.call('sup-01', '/api/stats/reference')).status, 404);
 });
 
 test('linking: not ready, bad body, missing key, access to the record by role', async () => {

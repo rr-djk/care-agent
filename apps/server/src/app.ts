@@ -14,6 +14,7 @@ import { sniffContentType, type OriginalStore } from './originals';
 import { acknowledge, differencesOf, duplicates, linkSession, patientRecord, proposalFor, proposalForKey, saveChoices } from './patients';
 import { maskIdentifiers } from './privacy';
 import { buildReview } from './review';
+import { recordAggregates, referenceAggregates } from './stats';
 import type { EventStore } from './stream';
 import type { Worker } from './worker';
 
@@ -25,6 +26,7 @@ export interface AppDeps {
   model: string | null; // reported by /api/health; null when analysis is off
   inkOnly?: boolean; // ANALYZER=ink: uploaded pages go straight to manual entry (no model)
   chatModel?: ChatModelFn; // CHAT_ENGINE=strands: LLM chat engine; the deterministic parser is the default
+  referenceCsv?: string; // synthetic reference dataset (read-only, under DATASETS_DIR) for the dashboard
 }
 
 const parseJson = (text: string): unknown => {
@@ -39,7 +41,7 @@ const PING_MS = 10_000;
 const MAX_CHAT_CHARS = 500;
 const MAX_KEY_CHARS = 80; // fiche number or facility typed by the midwife
 
-export function createApp({ db, originals, events, worker, model, inkOnly, chatModel }: AppDeps) {
+export function createApp({ db, originals, events, worker, model, inkOnly, chatModel, referenceCsv }: AppDeps) {
   const app = new Hono<{ Variables: { user: AuthUser } }>();
 
   app.onError((err, c) => {
@@ -276,6 +278,21 @@ export function createApp({ db, originals, events, worker, model, inkOnly, chatM
     ownSession(user, c.req.param('id'));
     acknowledge(db, user, c.req.param('id'));
     return c.json({ status: 'SYNCED' });
+  });
+
+  // anonymized aggregates for the supervisor: counts per band, small cells hidden, no id (stats.ts)
+  const supervisorOnly = (user: AuthUser) => {
+    if (user.role !== 'supervisor') throw new ApiError(403, 'forbidden', 'supervisor only');
+  };
+  app.get('/api/stats', (c) => {
+    supervisorOnly(c.get('user'));
+    return c.json(recordAggregates(db));
+  });
+  app.get('/api/stats/reference', (c) => {
+    supervisorOnly(c.get('user'));
+    const ref = referenceCsv ? referenceAggregates(referenceCsv) : null;
+    if (!ref) throw new ApiError(404, 'no_reference', 'the reference dataset is not available');
+    return c.json(ref);
   });
 
   app.get('/api/review/duplicates', (c) => c.json(duplicates(db, c.get('user'))));

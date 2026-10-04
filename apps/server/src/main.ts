@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { logger } from 'hono/logger';
@@ -13,7 +14,7 @@ import { openOriginals } from './originals';
 import { EventStore } from './stream';
 import { createWorker, AnalysisError, type Analyzer } from './worker';
 import { analyzePage } from './vision/analyze';
-import { defaultDeps, loadCellBoxes } from './cli/pages';
+import { defaultDeps, loadCellBoxes, repoRoot } from './cli/pages';
 import { inkOnlyFields } from './vision/manual';
 import { modelConfig } from './vision/model';
 import { rectify } from './vision/rectify';
@@ -64,7 +65,9 @@ const root = new Hono();
 root.use(logger()); // method, path (ids only), status: never bodies
 // CHAT_ENGINE=strands: LLM chat engine (tool loop on Ollama's /v1); the deterministic parser is the default.
 const chatModel = process.env.CHAT_ENGINE === 'strands' ? openAiCompatModel() : undefined;
-root.route('/', createApp({ db, originals, events, worker, model: analyzerOn ? modelConfig().model : null, inkOnly: mode === 'ink', chatModel }));
+// Synthetic reference dataset of the challenge (read-only, outside the repo): the dashboard shows it next to the live records.
+const referenceCsv = resolve(repoRoot, process.env.DATASETS_DIR ?? '../datasets', 'data/maternal_registry_synthetic.csv');
+root.route('/', createApp({ db, originals, events, worker, model: analyzerOn ? modelConfig().model : null, inkOnly: mode === 'ink', chatModel, referenceCsv }));
 
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: root.fetch, port, hostname: '0.0.0.0' }, () => console.log(`care-agent server on :${port} (data: ${dataDir}, analyzer ${mode === 'ink' ? 'ink' : analyzerOn ? 'on' : 'off'})`));
