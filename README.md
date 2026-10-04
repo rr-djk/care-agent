@@ -22,9 +22,29 @@ What works today: reading registry pages with the local model (command line, sec
 
 ### 1. Prerequisites
 
+**Supported systems.** Linux and Windows (Node 20 to 24). macOS has not been tested (nobody on the team has a Mac), so it is not supported for now.
+
+**Windows.** The commands below use `make`, which Windows does not ship. Either work in WSL (then follow the Linux instructions), or install the tools natively:
+
+```powershell
+choco install make nodejs-lts python poppler    # then open a new terminal
+python --version                                # if `make test` cannot find `python3`, create a `python3` alias or run it from WSL
+```
+
+Environment variables are written Bash-style in this README (`ANALYZER=off make server`). In PowerShell, set the variable first, then run the command, and remove it afterwards:
+
+| Bash | PowerShell |
+| --- | --- |
+| `ANALYZER=off make server` | `$env:ANALYZER = 'off'; make server` |
+| `VITE_FIXTURES=1 make pwa` | `$env:VITE_FIXTURES = '1'; make pwa` |
+| `CHAT_ENGINE=strands make server` | `$env:CHAT_ENGINE = 'strands'; make server` |
+| `READER=cell make server` | `$env:READER = 'cell'; make server` |
+| `DATASETS_DIR=/path/to/datasets make check` | `$env:DATASETS_DIR = 'C:\path\to\datasets'; make check` |
+| (unset by closing the shell) | `Remove-Item Env:ANALYZER` |
+
 - Node.js 20 and npm.
 - Python 3.12 with `PyMuPDF`, `numpy`, `opencv-python` and `Pillow` (`pip install pymupdf numpy opencv-python pillow`, in a venv if your system refuses global installs). Needed by `make test` and to regenerate ground truth.
-- `pdftotext` (package `poppler-utils`), used by `make pages`.
+- `pdftotext` (package `poppler-utils` on Linux, `poppler` on Windows), used by `make pages`.
 - The challenge data, laid out like this (the repo never modifies it):
 
   ```
@@ -285,14 +305,14 @@ In Bash, use `READER=cell make server`. This mode reads inked text cells locally
 
 Goal: open the app on a real phone, take a photo of a registry page with its camera, and see the analysis and the review. The phone's browser only allows the camera on HTTPS, so the laptop serves the PWA with a certificate from **mkcert**, a tool that creates a small local certificate authority (CA); the phone is told to trust that CA once. Plan ~20 minutes the first time. Steps 1–4 are done once per laptop/phone; steps 5–7 each time.
 
-**What you need:** the laptop (Linux; macOS/Windows notes inline) with the repo installed (sections 1–2) and Ollama + `gemma4:e4b` running; an Android phone or iPhone on the **same Wi-Fi** as the laptop; a printed specimen page, or a page shown full screen on another screen (e.g. `../datasets/data/Paper Registry/dossiers_specimen_10_patientes-19.png`, page type 3).
+**What you need:** the laptop (Linux or Windows; macOS is not supported) with the repo installed (sections 1–2) and Ollama + `gemma4:e4b` running; an Android phone or iPhone on the **same Wi-Fi** as the laptop; a printed specimen page, or a page shown full screen on another screen (e.g. `../datasets/data/Paper Registry/dossiers_specimen_10_patientes-19.png`, page type 3).
 
 **1. Install mkcert on the laptop**
 
 ```
 sudo apt install libnss3-tools mkcert        # Debian/Ubuntu. Package missing? Download the binary from
                                              # https://github.com/FiloSottile/mkcert/releases, chmod +x it, put it in your PATH
-# macOS: brew install mkcert nss     Windows: choco install mkcert
+# Windows: choco install mkcert
 mkcert -version                              # expect a version line, e.g. v1.4.4
 ```
 
