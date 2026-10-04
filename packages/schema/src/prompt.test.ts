@@ -8,28 +8,28 @@ const fixture = (zone: string) => readFileSync(new URL(`../test-fixtures/prompt-
 const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
 
 test('table zone prompt matches the committed snapshot and stays short', () => {
-  const p = buildZonePrompt(loadPageSchema('pregnancy'), 'p03.visits.r1c1');
-  assert.equal(p.prompt + '\n', fixture('p03.visits.r1c1'));
+  const p = buildZonePrompt(loadPageSchema('pregnancy'), 'p03.visits.r2c1');
+  assert.equal(p.prompt + '\n', fixture('p03.visits.r2c1'));
   assert.ok(words(p.prompt) < 110, `${words(p.prompt)} words`);
-  assert.equal(p.cellIds.length, 24);
+  assert.equal(p.cellIds.length, 21);
   assert.deepEqual(p.format, {
     type: 'object',
-    properties: { cells: { type: 'array', minItems: 24, maxItems: 24, items: { anyOf: [{ type: 'string' }, { type: 'null' }] } } },
+    properties: { cells: { type: 'array', minItems: 21, maxItems: 21, items: { anyOf: [{ type: 'string' }, { type: 'null' }] } } },
     required: ['cells'],
   });
 });
 
 test('ink-guided prompt lists only the asked cells, row by row', () => {
   const schema = loadPageSchema('pregnancy');
-  const zone = schema.zones.find((z) => z.id === 'p03.visits.r1c1')!;
+  const zone = schema.zones.find((z) => z.id === 'p03.visits.r2c1')!;
   const cells = zone.cells.filter((_, i) => i % 3 === 0); // column T1 V1
-  const p = buildZonePrompt(schema, 'p03.visits.r1c1', { cells: [...cells].reverse() }); // zone order wins
-  assert.equal(p.prompt + '\n', fixture('p03.visits.r1c1.guided'));
+  const p = buildZonePrompt(schema, 'p03.visits.r2c1', { cells: [...cells].reverse() }); // zone order wins
+  assert.equal(p.prompt + '\n', fixture('p03.visits.r2c1.guided'));
   assert.deepEqual(p.cellIds, cells);
-  assert.equal(cells.length, 8);
-  assert.equal((p.format as any).properties.cells.minItems, 8);
-  assert.equal((p.format as any).properties.cells.maxItems, 8);
-  assert.throws(() => buildZonePrompt(schema, 'p03.visits.r1c1', { cells: ['p03.ddr'] }));
+  assert.equal(cells.length, 7);
+  assert.equal((p.format as any).properties.cells.minItems, 7);
+  assert.equal((p.format as any).properties.cells.maxItems, 7);
+  assert.throws(() => buildZonePrompt(schema, 'p03.visits.r2c1', { cells: ['p03.ddr'] }));
 });
 
 test('form zone prompt matches the committed snapshot and stays short', () => {

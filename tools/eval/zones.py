@@ -20,6 +20,10 @@ DATA = HERE / "data"
 TEMPLATE_PATIENT = 1
 MAX_TEXT_CELLS = 24
 
+# Pregnancy visit table, 30 rows: no zone may cross a dark section band (the band confused the reading of the rows next to it).
+# Sections: visits 4 rows | EXAMEN CLINIQUE 13 | EXAMEN BIOLOGIQUE 11 | TRAITEMENT 1 (Fer) | EXAMEN FAIT PAR 1.
+PREGNANCY_ROW_GROUPS = [4, 7, 6, 6, 5, 1, 1]
+
 # Per layout: (zone name, (y0, y1) band in page fractions, rows per zone, columns per zone, pad).
 # rows/cols None = everything in the band is one zone. pad = (left, right, top, bottom) in page fractions added
 # around the cells so the crop shows the printed labels and headers; in split tables only the first
@@ -39,7 +43,7 @@ PLANS = {
     ]),
     "pregnancy": (3, [
         ("header", (0, 0.145), None, None, (0.09, 0.09, 0.01, 0.008)),
-        ("visits", (0.145, 1), 8, 3, (0.19, 0.003, 0.036, 0.003)),
+        ("visits", (0.145, 1), PREGNANCY_ROW_GROUPS, 3, (0.19, 0.003, 0.036, 0.003)),
     ]),
     "delivery": (4, [
         ("place", (0, 0.33), None, None, (0.02, 0.1, 0.01, 0.01)),
@@ -91,6 +95,10 @@ def center(b):
 
 
 def chunks(n, size):
+    if isinstance(size, list):  # explicit row counts, one per zone
+        assert sum(size) == n, f"row groups {size} do not cover {n} rows"
+        ends = [sum(size[: i + 1]) for i in range(len(size))]
+        return list(zip([0] + ends[:-1], ends))
     return [(i, min(i + size, n)) for i in range(0, n, size)] if size else [(0, n)]
 
 

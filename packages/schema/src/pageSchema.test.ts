@@ -57,9 +57,9 @@ for (const layout of PAGE_LAYOUTS) {
   });
 }
 
-test('page 3 visit columns 2 and 3 carry the row-label strip, column 1 does not', () => {
+test('page 3 visit table zones in columns 2 and 3 carry the row-label strip, column 1 does not', () => {
   const s = loadPageSchema('pregnancy');
-  for (const z of s.zones.filter((x) => x.id.startsWith('p03.visits.'))) {
+  for (const z of s.zones.filter((x) => x.id.startsWith('p03.visits.') && x.rows)) { // single-row zones (Fer, Examen fait par) have no table
     assert.equal(z.label_strip !== undefined, !z.id.endsWith('c1'), z.id);
   }
 });

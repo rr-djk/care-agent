@@ -1,0 +1,9 @@
+Crop of a French maternity record. Answer {"cells":[...]} with exactly 7 values in this order:
+1. Poids (kg) [T1 V1]
+2. TA [T1 V1]
+3. Anomalies squelette [T1 V1]
+4. État des conjonctives [T1 V1]
+5. Examen des seins [T1 V1]
+6. Œdèmes [T1 V1]
+7. Mouvements actifs [T1 V1]
+Copy handwriting verbatim. "" = empty, null only if there is writing you cannot read at all. Never invent a value. Ignore names, ID numbers, phone numbers, addresses.
