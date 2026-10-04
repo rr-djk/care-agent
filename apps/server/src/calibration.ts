@@ -7,6 +7,7 @@ import { buildZonePrompt, PAGE_LAYOUTS, REAL_LAYOUTS, type ExtractedField, type 
 import { loadPageSchema } from '@care-agent/schema/node';
 import { loadCellBoxes } from './cli/pages';
 import { LOW_CATEGORY_CONFIDENCE } from './review';
+import { readerIdentity } from './vision/cellReader';
 import { PAD_PX } from './vision/crop';
 import { INK_PARAMS } from './vision/ink';
 import { modelConfig } from './vision/model';
@@ -29,6 +30,9 @@ export function pipelineHash(): string {
     h.update(JSON.stringify([...loadCellBoxes(layout)]));
     for (const z of schema.zones) h.update(buildZonePrompt(schema, z.id, { cells: z.cells }).prompt);
   }
+  // READER=cell|hybrid: the reader, its model file, threshold and crop; nothing for READER=gemma (hash unchanged)
+  const reader = readerIdentity();
+  if (reader) h.update(JSON.stringify({ reader }));
   return h.digest('hex');
 }
 

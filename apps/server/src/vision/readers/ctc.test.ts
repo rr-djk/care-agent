@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { FieldDef } from '@care-agent/schema';
-import { beamSearch, ctcLogLik, readField, templateFor, type Frames } from './ctc';
+import { beamSearch, ctcLogLik, meaningPosterior, readField, templateFor, type Frames } from './ctc';
 
 const CLASSES = ['', ...'0123456789/.-—,abcdegiklmnoANPRSsxé', ' '];
 
@@ -86,4 +86,21 @@ test('the greedy reading is kept when it fits the pattern, even if CTC sums favo
   const r = readField(f, field({ type: 'date', validators: ['date'] }));
   assert.equal(r.text, '02/11/2025');
   assert.ok(r.runner_up, 'the merged reading is the runner-up');
+});
+
+test('meaning posterior: same-value spellings add up, different values compete', () => {
+  const cm = field({ type: 'number', unit: 'cm', validators: ['range:120:200'] });
+  const lp = Math.log;
+  // "160 Cm", "160 cm" and "160cm" all mean 160: together they hold 0.9 of the mass
+  assert.ok(Math.abs(meaningPosterior(cm, [{ text: '160 Cm', logp: lp(0.4) }, { text: '160 cm', logp: lp(0.3) }, { text: '160cm', logp: lp(0.2) }, { text: '168 cm', logp: lp(0.1) }], '160 Cm') - 0.9) < 1e-9);
+  const date = field({ type: 'date', validators: ['date'] });
+  // "11/04/2026" against "1/04/2026": different dates, so the confidence stays low
+  assert.ok(meaningPosterior(date, [{ text: '11/04/2026', logp: lp(0.55) }, { text: '1/04/2026', logp: lp(0.45) }], '11/04/2026') < 0.6);
+  // an enum spelled in several ways: one value
+  const neg = field({ type: 'enum', allowed_values: ['Neg', 'Pos'] });
+  assert.ok(meaningPosterior(neg, [{ text: 'Neg', logp: lp(0.5) }, { text: 'neg', logp: lp(0.4) }, { text: 'Pos', logp: lp(0.1) }], 'Neg') > 0.89);
+});
+
+test('readField gives a posterior: high on clear frames', () => {
+  assert.ok(readField(frames(spell('12/05/2025', 0.99)), field({ type: 'date', validators: ['date'] })).posterior > 0.9);
 });

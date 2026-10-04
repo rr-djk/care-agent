@@ -5,6 +5,7 @@ import sharp from 'sharp';
 import { PAGE_LAYOUTS, REAL_LAYOUTS, type PageLayout } from '@care-agent/schema';
 import type { AnalyzeDeps, CellBox } from '../vision/analyze';
 import { fileCache } from '../vision/cache';
+import { sharedCellReader, readerMode } from '../vision/cellReader';
 import type { PageImage } from '../vision/ink';
 import { modelConfig, ollamaModel } from '../vision/model';
 import { rectify } from '../vision/rectify';
@@ -53,8 +54,15 @@ export async function loadLayoutImage(path: string, layout: PageLayout): Promise
   return (REAL_LAYOUTS as readonly string[]).includes(layout) ? rectify(page) : page;
 }
 
-/** Ollama model, file cache under data/cache and the cell boxes of the layout. */
+/** Ollama model, file cache under data/cache and the cell boxes of the layout; plus the cell reader when READER=cell|hybrid. */
 export function defaultDeps(layout: PageLayout): AnalyzeDeps {
   const cfg = modelConfig();
-  return { model: ollamaModel(cfg), modelName: cfg.model, cache: fileCache(`${repoRoot}/data/cache`), cellBoxes: loadCellBoxes(layout) };
+  const mode = readerMode();
+  return {
+    model: ollamaModel(cfg),
+    modelName: cfg.model,
+    cache: fileCache(`${repoRoot}/data/cache`),
+    cellBoxes: loadCellBoxes(layout),
+    ...(mode !== 'gemma' && { cellReader: sharedCellReader(), readerMode: mode }),
+  };
 }

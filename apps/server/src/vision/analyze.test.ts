@@ -150,6 +150,7 @@ test('status rules', () => {
     ['model empty, ink present', { verbatim: '', empty: true, hasInk: true }, 'NEEDS_REVIEW'],
     ['model non-empty, no ink', { hasInk: false }, 'NEEDS_REVIEW'],
     ['model and ink agree', {}, 'KNOWN'],
+    ['a written dash means "non fourni"', { verbatim: '—', empty: true, dash: true }, 'NOT_PROVIDED'],
   ];
   for (const [name, input, expected] of rows) assert.equal(cellStatus({ ...base, ...input }), expected, name);
 });

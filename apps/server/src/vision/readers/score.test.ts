@@ -38,3 +38,8 @@ test('status: KNOWN under the threshold goes to review with a reason; other stat
   assert.deepEqual(readerStatus('KNOWN', 0.9, 0.8), { status: 'KNOWN' });
   assert.deepEqual(readerStatus('NOT_PROVIDED', 0, 0.8), { status: 'NOT_PROVIDED' });
 });
+
+test('with a posterior, the score is the posterior (0 if a validator fails)', () => {
+  assert.equal(readerScore(readerSignals({ ...clear('160 Cm'), steps: [{ p: 0.3 }], posterior: 0.97 }, field({ type: 'number', unit: 'cm', validators: ['range:120:200'] }))), 0.97);
+  assert.equal(readerScore(readerSignals({ ...clear('12/13/2025'), posterior: 0.99 }, date)), 0);
+});

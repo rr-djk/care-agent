@@ -8,7 +8,7 @@
 import { readFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { loadPageSchema } from '@care-agent/schema/node';
-import { readerScore, readerSignals } from '../../apps/server/src/vision/readers/score.ts';
+import { readerScore, readerSignals, weakest } from '../../apps/server/src/vision/readers/score.ts';
 
 const { values } = parseArgs({
   options: {
@@ -27,7 +27,7 @@ const fieldOf = (r) => {
 };
 
 const cells = records.map((r) => {
-  const sig = readerSignals({ text: r.reading ?? '', steps: (r.steps ?? []).map((s) => ({ p: s.p, frames: s.n })), logp: r.logp, logp_free: r.logp_free, rank: r.rank, runner_up: r.runner_up }, fieldOf(r));
+  const sig = readerSignals({ text: r.reading ?? '', steps: (r.steps ?? []).map((s) => ({ p: s.p, frames: s.n })), logp: r.logp, logp_free: r.logp_free, rank: r.rank, runner_up: r.runner_up, posterior: r.posterior }, fieldOf(r));
   return { ...r, sig, score: readerScore(sig) };
 });
 const fitted = cells.filter((c) => !c.real);
@@ -64,6 +64,8 @@ for (const [name, set] of [['clean tune pages', fitted.filter((c) => (c.variant 
     'mean char p': (c) => c.sig.mean_char_p,
     'constraint cost': (c) => c.sig.constraint,
     'runner-up margin': (c) => c.sig.margin ?? 1,
+    'weakest (phase 3)': (c) => weakest(c.sig),
+    'meaning posterior': (c) => c.sig.posterior ?? 0,
     'validators': (c) => +c.sig.validators_passed,
     'ink ratio': (c) => c.ink,
     SCORE: (c) => c.score,
@@ -108,3 +110,24 @@ if (real.length) {
   console.log('\n== real photo (report only, never fitted)');
   for (const c of real) console.log(`  ${c.score.toFixed(2)}  ${c.key.padEnd(40)} ${JSON.stringify(c.truth).padEnd(18)} ${JSON.stringify(c.reading)} ${c.ok ? 'right' : 'wrong'}`);
 }
+
+// leave one tune patient out: threshold fitted (0 wrong left KNOWN) on the clean cells of the other patients, applied to
+// the held-out patient's clean cells and degraded variants. This is how the threshold behaves on a hand it has not seen.
+const pagesJson = JSON.parse(await readFile(new URL('./data/pages.json', import.meta.url), 'utf8')).pages;
+const patientOf = (c) => pagesJson.find((p) => p.page_no === Number(String(c.page).split('/')[0]))?.patient;
+const patients = [...new Set(fitted.map(patientOf))].filter(Boolean).sort((a, b) => a - b);
+const lopo = (scoreOf, label) => {
+  let rev = 0, n = 0, wk = 0, vrev = 0, vn = 0, vwk = 0, vw = 0;
+  for (const p of patients) {
+    const train = clean.filter((c) => patientOf(c) !== p);
+    const t = grid.find((g) => train.filter((c) => scoreOf(c) >= g && !c.ok).length <= target) ?? 1;
+    const held = clean.filter((c) => patientOf(c) === p);
+    const heldVar = varied.filter((c) => patientOf(c) === p);
+    rev += held.filter((c) => scoreOf(c) < t).length; n += held.length; wk += held.filter((c) => scoreOf(c) >= t && !c.ok).length;
+    vrev += heldVar.filter((c) => scoreOf(c) < t).length; vn += heldVar.length; vwk += heldVar.filter((c) => scoreOf(c) >= t && !c.ok).length; vw += wrongOf(heldVar);
+  }
+  console.log(`  ${label.padEnd(20)} clean: ${pct(rev, n).padStart(7)} to review, ${wk} wrong left KNOWN of ${wrongOf(clean)} | variants: ${pct(vrev, vn).padStart(7)} to review, ${vwk} of ${vw} wrong left KNOWN`);
+};
+console.log(`\n== leave one tune patient out (${patients.length} patients): threshold fitted on the others, applied to the held-out one`);
+lopo((c) => weakest(c.sig), 'weakest (phase 3)');
+lopo((c) => c.score, 'SCORE (posterior)');

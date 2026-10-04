@@ -19,7 +19,7 @@ import { loadCellBoxes, loadLayoutImage, pagePngPath, realPhotoPath, repoRoot } 
 import { maskPage } from '../../apps/server/src/vision/crop.ts';
 import { rectify } from '../../apps/server/src/vision/rectify.ts';
 import { cellHasInk, checkboxInkRatio, inkRatio } from '../../apps/server/src/vision/ink.ts';
-import { cellCrop, inkTrimCrop, prepCrop } from '../../apps/server/src/vision/readers/common.ts';
+import { cellCrop, INK_CROP, inkTrimCrop, prepCrop } from '../../apps/server/src/vision/readers/common.ts';
 import { greedy, readField } from '../../apps/server/src/vision/readers/ctc.ts';
 import { paddleReader } from '../../apps/server/src/vision/readers/paddle.ts';
 import { trocrReader } from '../../apps/server/src/vision/readers/trocr.ts';
@@ -108,7 +108,7 @@ for (const name of values.readers.split(',')) {
       const ink = inkRatio(page, box.bbox_frac);
       let reading = null;
       if (cellHasInk(ink, 'text', job.layout)) {
-        const crop = values.crop === 'ink' ? inkTrimCrop(masked, box.bbox_frac, pad, 4, 140, 40, 45, 32, Number(values['margin-x'])) : cellCrop(masked, box.bbox_frac, pad);
+        const crop = values.crop === 'ink' ? inkTrimCrop(masked, box.bbox_frac, pad, { ...INK_CROP, marginX: Number(values['margin-x']) }) : cellCrop(masked, box.bbox_frac, pad);
         if (values.constrain) {
           if (!reader.frames) throw new Error('--constrain needs the paddle reader');
           const t = performance.now();
@@ -133,7 +133,7 @@ for (const name of values.readers.split(',')) {
         seq_logprob: reading ? +reading.seq_logprob.toFixed(4) : null, ms: reading ? +reading.ms.toFixed(1) : 0,
         ...(reading?.field && {
           reading_free: reading.free, ok_free: okFree, method: reading.field.method, rank: reading.field.rank,
-          logp: +reading.field.logp.toFixed(4), logp_free: +reading.field.logp_free.toFixed(4),
+          logp: +reading.field.logp.toFixed(4), logp_free: +reading.field.logp_free.toFixed(4), posterior: +reading.field.posterior.toFixed(4),
           runner_up: reading.field.runner_up && { text: reading.field.runner_up.text, logp: +reading.field.runner_up.logp.toFixed(4) },
         }),
       }));

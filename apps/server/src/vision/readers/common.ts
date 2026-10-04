@@ -39,6 +39,9 @@ export function cellCrop(masked: PageImage, [fx0, fy0, fx1, fy1]: BBoxFrac, pad:
   return { data, width, height };
 }
 
+/** inkTrimCrop parameters (part of the pipeline hash when the cell reader is on, cellReader.ts). */
+export const INK_CROP = { margin: 4, marginX: 8, inkLuma: 140, runH: 40, runV: 45, minH: 32 };
+
 /**
  * Tight crop around the handwriting: the cell box widened by `expand` px (page skew clips the first/last letters of a
  * plain box crop), printed lines whitened (horizontal dark runs >= `runH` px, vertical >= `runV` px: handwriting strokes
@@ -47,7 +50,8 @@ export function cellCrop(masked: PageImage, [fx0, fy0, fx1, fy1]: BBoxFrac, pad:
  * at least `minH` px high (paper added above and below: a lone "—" filling the whole crop is not read as a dash).
  * Falls back to the plain box when no ink is left.
  */
-export function inkTrimCrop(masked: PageImage, bbox: BBoxFrac, expand: number, margin = 4, inkLuma = 140, runH = 40, runV = 45, minH = 32, marginX = 8): PageImage {
+export function inkTrimCrop(masked: PageImage, bbox: BBoxFrac, expand: number, p = INK_CROP): PageImage {
+  const { margin, marginX, inkLuma, runH, runV, minH } = p;
   const c = cellCrop(masked, bbox, expand);
   const { width: w, height: h } = c;
   const dark = new Uint8Array(w * h);

@@ -5,7 +5,7 @@ import { PageType } from './page';
 export const ReviewKind = z.enum(['doubt', 'illegible', 'unread', 'manual']);
 export type ReviewKind = z.infer<typeof ReviewKind>;
 
-export const ReviewReason = z.enum(['unusual_value', 'ink_but_empty', 'illegible', 'not_read', 'manual', 'low_quality', 'low_category_confidence']);
+export const ReviewReason = z.enum(['unusual_value', 'ink_but_empty', 'illegible', 'not_read', 'manual', 'low_quality', 'low_category_confidence', 'low_reader_confidence']);
 export type ReviewReason = z.infer<typeof ReviewReason>;
 
 export const ReviewAction = z.enum(['confirm', 'correct', 'retake', 'leave_illegible']);
