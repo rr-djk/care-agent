@@ -1,5 +1,6 @@
 // Linking engine (pure): which known patients could be the woman of a session? Never decides anything: it only builds
-// candidates and the question the midwife answers. Matching key = (fiche number, facility); age, LMP (DDR),
+// candidates and the question the midwife answers. Matching key = the fiche number (the code written on the registry),
+// narrowed by the facility when one is known; age, LMP (DDR),
 // gravidity/parity and province are cross-checks. Nothing here is an identifier.
 import type { Candidate, CandidateKind, LinkProposal } from '@care-agent/schema';
 
@@ -103,29 +104,30 @@ const MAX_CANDIDATES = 2;
 
 /** Exact key match, then near matches: fiche one edit away, facility name one or two edits away, same facility with close LMP and age. */
 export function findCandidates(session: SessionKey, patients: KnownPatient[]): Candidate[] {
-  if (!session.fiche || !session.facility) return [];
+  if (!session.fiche) return [];
   const fiche = normalizeFiche(session.fiche).key;
-  const facility = normalizeFacility(session.facility);
+  const facility = session.facility ? normalizeFacility(session.facility) : null; // no facility: the code alone decides
   const out: Candidate[] = [];
   for (const p of patients) {
     const pFiche = normalizeFiche(p.fiche_number).key;
     const pFacility = normalizeFacility(p.facility);
-    const sameFacility = pFacility === facility;
+    const known = facility !== null && pFacility !== ''; // both sides name a facility: it narrows the match
+    const sameFacility = !known || pFacility === facility;
     const fd = editDistance(fiche, pFiche);
-    const cd = editDistance(facility, pFacility);
+    const cd = known ? editDistance(facility, pFacility) : Infinity;
     const { matches, mismatches } = crossCheck(session.attrs, p.attrs);
     let kind: CandidateKind | undefined;
     let why = '';
     if (fd === 0 && sameFacility) {
       kind = 'exact';
-      why = 'Même numéro de fiche et même établissement.';
+      why = !known ? 'Même numéro de fiche (aucun établissement indiqué).' : 'Même numéro de fiche et même établissement.';
     } else if (fd === 1 && sameFacility) {
       kind = 'near_fiche';
       why = `Numéro de fiche presque identique (${p.fiche_number} dans le dossier), même établissement.`;
     } else if (fd === 0 && cd <= 2) {
       kind = 'near_facility';
       why = `Même numéro de fiche, établissement au nom proche (${p.facility}).`;
-    } else if (sameFacility && nearAttributes(session.attrs, p.attrs)) {
+    } else if (known && sameFacility && nearAttributes(session.attrs, p.attrs)) {
       kind = 'near_attributes';
       why = 'Même établissement, DDR et âge proches.';
     }
@@ -151,23 +153,24 @@ function nearAttributes(a: Attributes, b: Attributes): boolean {
 // --- the question --------------------------------------------------------------------------------------------
 
 /**
- * Decision rules. No fiche or facility: ask to type them. A doubtful fiche reading: ask to confirm it. Then:
+ * Decision rules. No fiche: ask to type it (the facility is optional). A doubtful fiche reading: ask to confirm it. Then:
  * no candidate -> propose to create; exactly one exact and consistent candidate -> propose it; anything else
  * (several, near, inconsistent) -> the 4-button question. Every case asks: nothing is linked or created silently.
  */
 export function propose(sessionId: string, session: SessionKey, patients: KnownPatient[]): LinkProposal {
   const doubtful = session.fiche !== null && session.source !== 'typed' && normalizeFiche(session.fiche).low_confidence;
   const base = { session_id: sessionId, fiche: { value: session.fiche, source: session.source, low_confidence: doubtful }, facility: session.facility };
-  if (!session.fiche || !session.facility) {
-    return { ...base, question: 'need_key', text_fr: "Je n'ai pas pu lire le numéro de la fiche ou l'établissement. Saisissez-les pour retrouver la patiente.", candidates: [] };
+  if (!session.fiche) {
+    return { ...base, question: 'need_key', text_fr: "Je n'ai pas pu lire le numéro de la fiche. Saisissez-le (l'établissement est facultatif) pour retrouver la patiente.", candidates: [] };
   }
+  const where = session.facility ? ` (${session.facility})` : '';
   if (doubtful) {
     return { ...base, question: 'confirm_fiche', text_fr: `J'ai lu ${session.fiche}, est-ce correct ?`, candidates: [] };
   }
   const candidates = findCandidates(session, patients);
   const [first] = candidates;
   if (!first) {
-    return { ...base, question: 'create', text_fr: `Aucun dossier ne correspond à la fiche ${session.fiche} (${session.facility}). Créer un nouveau dossier ?`, candidates };
+    return { ...base, question: 'create', text_fr: `Aucun dossier ne correspond à la fiche ${session.fiche}${where}. Créer un nouveau dossier ?`, candidates };
   }
   if (candidates.length === 1 && first.kind === 'exact' && first.consistent) {
     return { ...base, question: 'propose', text_fr: `La fiche ${session.fiche} correspond au dossier ${first.patient_id}. Est-ce bien la même patiente ?`, candidates };

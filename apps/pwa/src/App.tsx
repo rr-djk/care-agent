@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getAuth, setAuth, type Auth } from './api';
 import { Chat } from './components/Chat';
+import { Dashboard } from './components/Dashboard';
 import { Login } from './components/Login';
 import { Unlock } from './components/Unlock';
 import { isOffline, subscribeNet } from './offline/network';
@@ -39,6 +40,7 @@ export function App() {
     setPhase({ name: 'login' });
   };
 
+  if (auth?.role === 'supervisor') return <Dashboard auth={auth} onLogout={leave} />; // read-only: no capture, no chat
   if (auth) return <Chat auth={auth} onLogout={leave} onWipe={erase} />;
   if (phase.name === 'loading') return null;
   if (phase.name === 'unlock') {

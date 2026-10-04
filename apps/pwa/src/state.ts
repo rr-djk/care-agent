@@ -45,7 +45,7 @@ const ERRORS: Record<string, string> = {
   manual_unavailable: "La saisie manuelle n'est pas disponible.",
   already_linked: 'Cette session est déjà liée à un dossier.',
   session_not_ready: 'Toutes les pages de la session doivent être confirmées avant de choisir le dossier.',
-  link_key_missing: "Le numéro de la fiche et l'établissement sont nécessaires pour créer un dossier.",
+  link_key_missing: "Le numéro de la fiche est nécessaire pour créer un dossier.",
   patient_not_found: 'Dossier introuvable.',
   not_registered: "Le dossier n'est pas encore enregistré.",
   bad_request: "Cette demande n'a pas pu être traitée.",

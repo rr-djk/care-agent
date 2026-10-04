@@ -87,9 +87,19 @@ test('low-confidence fiche: confirm first, no candidates yet; a typed or confirm
   assert.equal(typed.fiche.low_confidence, false);
 });
 
-test('missing fiche or facility: ask to type them; nothing known: propose to create', () => {
+test('a code alone (no facility): matched on the code, near on one edit, never on attributes; a patient without facility matches any', () => {
+  const p = propose('s1', session('2026-823-001', null, {}, 'typed'), [P1]);
+  assert.equal(p.question, 'propose');
+  assert.equal(p.candidates[0].reasons[0], 'Même numéro de fiche (aucun établissement indiqué).');
+  assert.deepEqual(findCandidates(session('2026-823-007', null), [P1]).map((c) => c.kind), ['near_fiche']);
+  assert.deepEqual(findCandidates(session('2026-999-777', null, { age: 28, ddr: '12/03/2026' }), [P1]), []); // attributes need a facility
+  const noFacility = patient('PAT-000009', '2026-555-001', '');
+  assert.deepEqual(findCandidates(session('2026-555-001', 'CSCA Al Wifaq'), [noFacility]).map((c) => c.kind), ['exact']);
+  assert.match(propose('s1', session('2026-111-004', null, {}, 'typed'), []).text_fr, /^Aucun dossier ne correspond à la fiche 2026-111-004\. /);
+});
+
+test('missing fiche: ask to type it; nothing known: propose to create', () => {
   assert.equal(propose('s1', session(null, 'CSCA Al Wifaq', {}, 'none'), [P1]).question, 'need_key');
-  assert.equal(propose('s1', session('2026-823-001', null), [P1]).question, 'need_key');
   const none = propose('s1', session('2026-111-004', 'CSCA Al Wifaq'), []);
   assert.deepEqual([none.question, none.candidates], ['create', []]);
 });
