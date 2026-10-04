@@ -1,5 +1,8 @@
 .PHONY: check test pages truth schemas eval predict degrade calibrate quality-curve report eval-full smoke quality-eval server pwa certs help
 
+# Python reads files as UTF-8 on every OS (Windows defaults to cp1252: "Néant" in normalize_cases.json was misread).
+export PYTHONUTF8 = 1
+
 help: ## List targets
 	@echo "make check  - dataset guard + typecheck + tests"
 	@echo "make test   - schema tests + tools tests"
@@ -32,7 +35,7 @@ test:
 	npm test -w @care-agent/quality
 	npm test -w @care-agent/server
 	npm test -w @care-agent/pwa
-	node --import tsx --test tools/
+	node --import tsx --test $(wildcard tools/*.test.mjs tools/*/*.test.mjs)
 	python3 -m unittest discover -s tools/eval
 
 pages:

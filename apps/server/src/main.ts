@@ -14,6 +14,7 @@ import { openOriginals } from './originals';
 import { EventStore } from './stream';
 import { createWorker, AnalysisError, type Analyzer } from './worker';
 import { analyzePage } from './vision/analyze';
+import { readerIdentity, readerMode } from './vision/cellReader';
 import { defaultDeps, loadCellBoxes, repoRoot } from './cli/pages';
 import { inkOnlyFields } from './vision/manual';
 import { modelConfig } from './vision/model';
@@ -34,6 +35,18 @@ if (pins.length) {
 // ANALYZER=ink never calls the model: pages go straight to manual entry (ink-only reading).
 const mode = process.env.ANALYZER;
 const analyzerOn = mode !== 'off' && mode !== 'ink';
+// READER=cell|hybrid: inked text cells read by the local cell reader (vision/cellReader.ts); checked here so a typo or
+// a missing model stops the start instead of failing every page.
+const reader = readerMode();
+if (analyzerOn && reader !== 'gemma') {
+  try {
+    readerIdentity(reader);
+  } catch {
+    console.error('READER=' + reader + ': cell reader model not found under models/ (run: node tools/eval/fetch-cell-models.mjs)');
+    process.exit(1);
+  }
+}
+const analysisModel = reader === 'cell' ? 'paddle-latin-v5' : reader === 'hybrid' ? `paddle-latin-v5+${modelConfig().model}` : modelConfig().model;
 
 /** Decodes and rectifies the image and returns the schema + page of a page type, or fails like the analysis does. */
 async function decode(image: Buffer, pageType: number) {
@@ -67,8 +80,8 @@ root.use(logger()); // method, path (ids only), status: never bodies
 const chatModel = process.env.CHAT_ENGINE === 'strands' ? openAiCompatModel() : undefined;
 // Synthetic reference dataset of the challenge (read-only, outside the repo): the dashboard shows it next to the live records.
 const referenceCsv = resolve(repoRoot, process.env.DATASETS_DIR ?? '../datasets', 'data/maternal_registry_synthetic.csv');
-root.route('/', createApp({ db, originals, events, worker, model: analyzerOn ? modelConfig().model : null, inkOnly: mode === 'ink', chatModel, referenceCsv }));
+root.route('/', createApp({ db, originals, events, worker, model: analyzerOn ? analysisModel : null, inkOnly: mode === 'ink', chatModel, referenceCsv }));
 
 const port = Number(process.env.PORT ?? 8787);
-serve({ fetch: root.fetch, port, hostname: '0.0.0.0' }, () => console.log(`care-agent server on :${port} (data: ${dataDir}, analyzer ${mode === 'ink' ? 'ink' : analyzerOn ? 'on' : 'off'})`));
+serve({ fetch: root.fetch, port, hostname: '0.0.0.0' }, () => console.log(`care-agent server on :${port} (data: ${dataDir}, analyzer ${mode === 'ink' ? 'ink' : analyzerOn ? `on, reader ${reader}` : 'off'})`));
 worker.resume();

@@ -270,6 +270,17 @@ What to check in the browser: the analysis takes several minutes on CPU, the « 
 - UI only, no server: `VITE_FIXTURES=1 make pwa` replays a canned flow (a doubt, an illegible field, a failed page with manual entry, a retake).
 - Optional LLM chat: `CHAT_ENGINE=strands make server` (see `docs/security.md`).
 
+#### Optional cell reader (experimental)
+
+The default remains `READER=gemma`. To use the local Paddle cell reader instead, download its model files once while online with `node tools/eval/fetch-cell-models.mjs`; the files are stored under the git-ignored `models/` directory. Then start the server with `READER=cell`:
+
+```powershell
+$env:READER = 'cell'
+make server
+```
+
+In Bash, use `READER=cell make server`. This mode reads inked text cells locally instead of sending page analysis to Ollama. Remove the environment variable (`Remove-Item Env:READER` in PowerShell) to return to the default. The cell reader is experimental and has not passed the pending long evaluations; its speed and accuracy are not yet certified.
+
 ### 6. On a phone (same Wi-Fi as the laptop) — phone test over HTTPS
 
 Goal: open the app on a real phone, take a photo of a registry page with its camera, and see the analysis and the review. The phone's browser only allows the camera on HTTPS, so the laptop serves the PWA with a certificate from **mkcert**, a tool that creates a small local certificate authority (CA); the phone is told to trust that CA once. Plan ~20 minutes the first time. Steps 1–4 are done once per laptop/phone; steps 5–7 each time.
