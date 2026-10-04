@@ -1,4 +1,4 @@
-import type { Aggregates, Difference, ExtractedField, LinkDecision, LinkProposal, LinkResult, PatientRecord, RecordPage, ReviewQueue, Role, Session } from '@care-agent/schema';
+import type { Aggregates, Difference, ExtractedField, LinkDecision, LinkProposal, LinkResult, PatientRecord, PatientSummary, RecordPage, ReviewQueue, Role, Session } from '@care-agent/schema';
 import { ApiError } from './errors';
 import * as fixtures from './fixtures';
 import { netBlocked, setReachable } from './offline/network';
@@ -123,6 +123,10 @@ const live = {
   },
   async getPatient(id: string): Promise<PatientRecord> {
     return (await request(`/patients/${encodeURIComponent(id)}`)).json();
+  },
+  /** The patients of this midwife (all of them for the supervisor), most recent visit first. */
+  async listPatients(): Promise<PatientSummary[]> {
+    return (await request('/patients')).json();
   },
   /** Supervisor: anonymized aggregates of the linked records, and of the synthetic reference dataset (null when absent). */
   async getStats(): Promise<Aggregates> {

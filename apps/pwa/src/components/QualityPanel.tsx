@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { QualityResult } from '@care-agent/schema';
+import { qualityText, t, useLang } from '../i18n';
 
 interface Props {
   file: File;
@@ -10,6 +11,7 @@ interface Props {
 
 /** Post-capture verdict. WARNING: Reprendre / Garder quand même. REJECT: Reprendre only (nothing to read). */
 export function QualityPanel({ file, result, onRetake, onKeep }: Props) {
+  useLang();
   const [url, setUrl] = useState('');
   useEffect(() => {
     const u = URL.createObjectURL(file);
@@ -18,19 +20,19 @@ export function QualityPanel({ file, result, onRetake, onKeep }: Props) {
   }, [file]);
   const reject = result.outcome === 'REJECT';
   return (
-    <div className="overlay" role="dialog" aria-label="Qualité de la photo">
-      <div className={`quality ${result.outcome.toLowerCase()}`}>
-        <h2>{reject ? 'Photo inutilisable' : 'Photo à vérifier'}</h2>
-        {url && <img src={url} alt="Photo prise" />}
+    <div className="overlay center" role="dialog" aria-modal="true" aria-label={t('quality.title')}>
+      <div className={`panel ${result.outcome.toLowerCase()}`}>
+        <h2>{reject ? t('quality.reject') : t('quality.warning')}</h2>
+        {url && <img src={url} alt={t('quality.photo')} />}
         <ul>
           {result.messages.map((m) => (
-            <li key={m}>{m}</li>
+            <li key={m}>{qualityText(m)}</li>
           ))}
         </ul>
-        {!reject && <p className="note">Si vous la gardez, les champs lus sur cette page seront à vérifier un par un.</p>}
-        <div className="actions">
-          <button className="primary" onClick={onRetake}>Reprendre</button>
-          {!reject && <button onClick={onKeep}>Garder quand même</button>}
+        {!reject && <p className="hint" style={{ margin: 0 }}>{t('quality.note')}</p>}
+        <div className="grid2">
+          <button className="btn go" onClick={onRetake}>{t('quality.retake')}</button>
+          {!reject && <button className="btn" onClick={onKeep}>{t('quality.keep')}</button>}
         </div>
       </div>
     </div>

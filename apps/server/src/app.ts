@@ -11,7 +11,7 @@ import { ApiError } from './errors';
 import { applyFieldEdit, pageSchemaFor, parseEdit, reviewedFields } from './fields';
 import { transition } from './lifecycle';
 import { sniffContentType, type OriginalStore } from './originals';
-import { acknowledge, differencesOf, duplicates, linkSession, patientRecord, proposalFor, proposalForKey, saveChoices } from './patients';
+import { acknowledge, differencesOf, duplicates, linkSession, patientList, patientRecord, proposalFor, proposalForKey, saveChoices } from './patients';
 import { maskIdentifiers } from './privacy';
 import { buildReview } from './review';
 import { recordAggregates, referenceAggregates } from './stats';
@@ -243,6 +243,7 @@ export function createApp({ db, originals, events, worker, model, inkOnly, chatM
     return c.json(proposalForKey(db, fiche, facility?.trim() || undefined));
   });
 
+  app.get('/api/patients', (c) => c.json(patientList(db, c.get('user'))));
   app.get('/api/patients/:id', (c) => c.json(patientRecord(db, c.get('user'), c.req.param('id'))));
 
   app.post('/api/sessions/:id/link', async (c) => {

@@ -587,7 +587,8 @@ test('linking: create after the question, then the same fiche proposes the patie
   const q3 = await candidates(t, s3.sid);
   assert.equal(q3.question, 'propose');
   assert.deepEqual(q3.candidates.map((c: { patient_id: string; kind: string }) => [c.patient_id, c.kind]), [['PAT-000001', 'exact']]);
-  assert.deepEqual(q3.candidates[0].summary, { fiche_number: '2026-711-003', facility: 'DR Tahannaout Sud', age: 28, ddr: '12/03/2026', visits: 1, last_visit: q3.candidates[0].summary.last_visit });
+  assert.deepEqual(q3.candidates[0].summary, { fiche_number: '2026-711-003', facility: 'DR Tahannaout Sud', age: 28, ddr: '12/03/2026', gestation: 2, parite: 1, visits: 1, last_visit: q3.candidates[0].summary.last_visit });
+  assert.deepEqual(q3.current, { age: 28 }); // this fiche's own cross-check values, for the side-by-side comparison
   assert.equal(t.count('patients'), 2);
   assert.equal(t.count('session_links'), 2);
   const second = await (await link(t, 'sf-01', s3.sid, { kind: 'patient', patient_id: 'PAT-000001' })).json();
@@ -733,6 +734,27 @@ test('linking: not ready, bad body, missing key, access to the record by role', 
   assert.equal((await get('sf-02', 'PAT-000001')).status, 403); // no session of hers is linked to this patient
   assert.equal((await get('sf-01', 'PAT-000099')).status, 404);
   assert.equal((await t.app.request('/api/patients/PAT-000001')).status, 401);
+});
+
+test('patient list: a midwife sees the patients she linked, the supervisor all; stage, anchors and duplicates; no identifier', async () => {
+  const { readings, analyzer } = linkSetup();
+  const t = await setup(analyzer);
+  const list = async (user: string) => (await t.call(user, '/api/patients')).json();
+  assert.deepEqual(await list('sf-01'), []);
+  const a = await validatedSession(t, readings, { 1: COVER('2026-711-003'), 2: IDENT, 3: [['p03.ddr', '12/03/2026'], ['p03.date_prevue_d_accouchement', '17/12/2026']] });
+  await link(t, 'sf-01', a.sid, { kind: 'create_new' });
+  const b = await validatedSession(t, readings, { 1: COVER('2026-999-012', 'CSCA Al Wifaq', 'Kénitra'), 5: [['p05.t_deg', '37.0']] }, 'sf-02');
+  await link(t, 'sf-02', b.sid, { kind: 'create_new' });
+  // a near fiche parked as "Je ne sais pas": the candidate is marked as a possible duplicate
+  const near = await validatedSession(t, readings, { 1: COVER('2026-711-008'), 2: IDENT });
+  await link(t, 'sf-01', near.sid, { kind: 'not_sure' });
+
+  const mine = await list('sf-01');
+  assert.deepEqual(mine.map((p: { id: string }) => p.id), ['PAT-000001']);
+  assert.deepEqual(mine[0], { id: 'PAT-000001', fiche_number: '2026-711-003', facility: 'DR Tahannaout Sud', visits: 1, last_visit: mine[0].last_visit, stage: 'pregnancy', duplicate: true, age: 28, ddr: '12/03/2026', dpa: '17/12/2026', gestation: 2, parite: 1 });
+  assert.deepEqual((await list('sf-02')).map((p: { id: string; stage: string; duplicate: boolean }) => [p.id, p.stage, p.duplicate]), [['PAT-000002', 'postpartum', false]]);
+  assert.deepEqual((await list('sup-01')).map((p: { id: string }) => p.id).sort(), ['PAT-000001', 'PAT-000002']);
+  assert.equal((await t.app.request('/api/patients')).status, 401);
 });
 
 test('SYNCED: only after the phone acknowledges the registered record; a replay changes nothing', async () => {

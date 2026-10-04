@@ -1,7 +1,7 @@
 // VITE_FIXTURES=1: canned API for building and testing the UI without the server or the model.
 // Demo: the 1st page has one doubt and one illegible field; the 2nd fails (AI unavailable) and goes to manual entry;
 // a retake gives a clean page. Rules are canned (the real ones live on the server).
-import type { Aggregates, Difference, ExtractedField, LinkDecision, LinkProposal, LinkResult, PatientRecord, RecordPage, ReviewItem, ReviewQueue, Session, Status } from '@care-agent/schema';
+import type { Aggregates, Difference, ExtractedField, LinkDecision, LinkProposal, LinkResult, PatientRecord, PatientSummary, RecordPage, ReviewItem, ReviewQueue, Session, Status } from '@care-agent/schema';
 import type { Auth, FieldEdit, FieldResult } from './api';
 import { ApiError } from './errors';
 import { fieldDef, fieldLabel } from './schemas';
@@ -220,6 +220,13 @@ export const api = {
       visits: [{ session_id: sessionId, date: now, pages: pages.map((p) => ({ page_id: p.id, page_type: p.type, captured_at: now, state: p.state })) }],
       values: [{ page_type: 3, field_id: 'p03.ddr', label_fr: 'DDR', value: '12/03/2026', source_page_id: pages[0]?.id ?? '', source_date: now }],
     };
+  },
+  async listPatients(): Promise<PatientSummary[]> {
+    const now = new Date().toISOString();
+    return [
+      { id: 'PAT-000001', fiche_number: '2026-711-003', facility: 'DR Tahannaout Sud', visits: 2, last_visit: now, stage: 'pregnancy', ddr: '12/03/2026', dpa: '17/12/2026', age: 28, gestation: 2, parite: 1, duplicate: false },
+      { id: 'PAT-000002', fiche_number: '2026-640-118', facility: 'CSC Hay Salam', visits: 1, last_visit: now, stage: 'postpartum', duplicate: true },
+    ];
   },
   async getStats(): Promise<Aggregates> {
     const bins = (labels: string[], counts: (number | null)[]) => labels.map((label_fr, k) => ({ label_fr, count: counts[k] }));

@@ -1,69 +1,30 @@
 import type { Difference, ExtractedField, LinkDecision, LinkProposal, LinkResult, PageProgress, PatientRecord, ReviewItem, ReviewQueue, Session, Status, StreamEvent } from '@care-agent/schema';
+import { errorText, hasKey, t, type Key, type Params } from './i18n';
 
-export const PAGE_TYPES = [
-  { type: 1, label: 'Couverture' },
-  { type: 2, label: 'Identification' },
-  { type: 3, label: 'Grossesse' },
-  { type: 4, label: 'Accouchement' },
-  { type: 5, label: 'Post-partum mère' },
-  { type: 6, label: 'Post-partum nouveau-né' },
-  { type: 7, label: 'Post-partum mère tardif' },
-  { type: 8, label: 'Nouveau-né tardif' },
-] as const;
+export const PAGE_TYPES = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 
-export const pageLabel = (type: number | undefined) => PAGE_TYPES.find((p) => p.type === type)?.label ?? 'Page';
+/** Name of a page type in the current language. */
+export const pageLabel = (type: number | undefined) => (type && type >= 1 && type <= 8 ? t(`page.${type}` as Key) : t('page.unknown'));
 
-export const STATUS_FR: Record<Status, string> = {
-  KNOWN: 'lu',
-  NEEDS_REVIEW: 'à vérifier',
-  ILLEGIBLE: 'illisible',
-  UNKNOWN: 'non lu',
-  NOT_PROVIDED: 'non renseigné',
-  NOT_APPLICABLE: 'non applicable',
-};
+/** Status name in the current language. */
+export const statusLabel = (status: Status) => t(`status.${status}` as Key);
 
 // Order of the flagged fields in a page summary.
 const FLAGGED: Status[] = ['NEEDS_REVIEW', 'ILLEGIBLE', 'UNKNOWN'];
 
-const ERRORS: Record<string, string> = {
-  page_type_required: 'Choisissez le type de page avant de la photographier.',
-  page_type_unsupported: "Ce type de page n'est pas encore pris en charge.",
-  model_unreachable: "Le modèle d'analyse est injoignable. Réessayez plus tard.",
-  model_http: "Le modèle d'analyse a renvoyé une erreur.",
-  model_timeout: "L'analyse a pris trop de temps.",
-  analysis_failed: "L'analyse de cette page a échoué.",
-  bad_event: "Message illisible reçu du serveur.",
-  invalid_credentials: 'Identifiant ou code PIN incorrect.',
-  unauthorized: 'Session expirée, reconnectez-vous.',
-  session_not_found: 'Session introuvable, démarrez une nouvelle session.',
-  sha256_mismatch: "La photo a été corrompue pendant l'envoi, reprenez-la.",
-  page_not_editable: "Cette page n'est plus modifiable.",
-  illegal_transition: "Cette page ne peut pas être confirmée dans son état actuel.",
-  network: 'Serveur injoignable. Vérifiez la connexion.',
-  chat_failed: "Je n'ai pas pu traiter ce message.",
-  page_not_failed: "Cette page n'est pas en échec.",
-  manual_unavailable: "La saisie manuelle n'est pas disponible.",
-  already_linked: 'Cette session est déjà liée à un dossier.',
-  session_not_ready: 'Toutes les pages de la session doivent être confirmées avant de choisir le dossier.',
-  link_key_missing: "Le numéro de la fiche est nécessaire pour créer un dossier.",
-  patient_not_found: 'Dossier introuvable.',
-  not_registered: "Le dossier n'est pas encore enregistré.",
-  bad_request: "Cette demande n'a pas pu être traitée.",
-  http_error: 'Le serveur a répondu par une erreur.',
-  invalid_meta: 'Les informations de la page sont invalides.',
-  not_found: 'Page ou ressource introuvable sur le serveur.',
-  forbidden: "Ce compte n'a pas le droit d'envoyer cette page.",
-  session_id_taken: 'Cette session appartient à un autre compte.',
-  local_data_missing: "L'image n'est plus sur l'appareil.",
-  wrong_pin: 'Code PIN incorrect.',
-  no_token: 'Vous êtes déconnecté : connectez-vous en ligne.',
-  device_pin_mismatch: "Ce code PIN diffère de celui de cet appareil, qui garde des pages non envoyées. Utilisez l'ancien code.",
-};
+export { errorText };
 
-export const errorText = (code: string) => ERRORS[code] ?? 'Une erreur est survenue.';
+/** Key of the text of an error code (unknown codes get the generic text). */
+const errorKey = (code: string): Key => (hasKey(`error.${code}`) ? (`error.${code}` as Key) : 'error.unknown');
+
+/**
+ * A text message: `key` (+ `params`) for what the app says, rendered in the current language by msgText; `text` for what
+ * the server wrote (chat replies, field explanations), shown as received. A `pageType` param also fills `{label}`.
+ */
+export type TextMsg = { id: number; from: 'bot' | 'user'; kind: 'text'; key?: Key; params?: Params; text?: string; hint?: Key; streaming?: boolean };
 
 export type Msg =
-  | { id: number; from: 'bot' | 'user'; kind: 'text'; text: string; hint?: string; streaming?: boolean }
+  | TextMsg
   | { id: number; from: 'bot'; kind: 'summary'; pageId: string }
   | { id: number; from: 'bot'; kind: 'item'; item: ReviewItem } // one review question; buttons only while it is the current one
   | { id: number; from: 'bot'; kind: 'page_clear'; pageId: string } // "Tout est vérifié pour la page N" + Confirmer la page
@@ -119,7 +80,8 @@ export const initialState: State = {
 
 export type Action =
   | { type: 'session_started'; session: Session }
-  | { type: 'say'; from: 'bot' | 'user'; text: string; hint?: string }
+  | { type: 'say'; from: 'bot' | 'user'; text: string } // as written (the midwife's message, a server explanation)
+  | { type: 'say'; from: 'bot'; key: Key; params?: Params } // the app's own words, in the current language
   | { type: 'session_restored'; session: Session; pages: { id: string; pageType?: number; replaces?: string }[] }
   | { type: 'page_added'; pageId: string; pageType: number; replaces?: string }
   | { type: 'review_loaded'; queue: ReviewQueue }
@@ -134,6 +96,13 @@ export type Action =
 type NewMsg = Msg extends infer M ? (M extends Msg ? Omit<M, 'id'> : never) : never;
 
 const push = (s: State, msg: NewMsg): State => ({ ...s, messages: [...s.messages, { ...msg, id: s.messages.length } as Msg] });
+
+/** The text of a text message in the current language. */
+export function msgText(m: Pick<TextMsg, 'key' | 'params' | 'text'>): string {
+  if (!m.key) return m.text ?? '';
+  const params = m.params && 'pageType' in m.params ? { ...m.params, label: pageLabel(Number(m.params.pageType)) } : m.params;
+  return t(m.key, params);
+}
 
 const newPage = (id: string, pageType?: number): PageView => ({ id, pageType, fields: null, flagged: [], failed: false, validated: false, cleared: false, superseded: false });
 
@@ -179,23 +148,18 @@ function onEvent(s: State, e: StreamEvent): State {
   }
   switch (e.type) {
     case 'page_received':
-      return push(patchPage(s, e.page_id, () => ({})), {
-        from: 'bot',
-        kind: 'text',
-        text: 'Page reçue, analyse en cours…',
-        hint: "Sur ordinateur sans carte graphique, l'analyse prend plusieurs minutes.",
-      });
+      return push(patchPage(s, e.page_id, () => ({})), { from: 'bot', kind: 'text', key: 'msg.page_received', hint: 'msg.page_received_hint' });
     case 'page_read':
       return push(patchPage(s, e.page_id, () => ({ fields: e.fields, failed: false })), { from: 'bot', kind: 'summary', pageId: e.page_id });
     case 'field_flagged':
       return patchPage(s, e.page_id, (p) => ({ flagged: [...p.flagged, e.field_id] }));
     case 'error': {
-      const failed = push(e.page_id ? patchPage(s, e.page_id, () => ({ failed: true, failCode: e.code })) : s, { from: 'bot', kind: 'text', text: errorText(e.code) });
+      const failed = push(e.page_id ? patchPage(s, e.page_id, () => ({ failed: true, failCode: e.code })) : s, { from: 'bot', kind: 'text', key: errorKey(e.code) });
       return e.page_id && e.code.startsWith('model_') ? push(failed, { from: 'bot', kind: 'manual_offer', pageId: e.page_id }) : failed;
     }
     case 'token': {
       const last = s.messages.at(-1);
-      if (last?.kind === 'text' && last.streaming) return { ...s, messages: [...s.messages.slice(0, -1), { ...last, text: last.text + e.text }] };
+      if (last?.kind === 'text' && last.streaming) return { ...s, messages: [...s.messages.slice(0, -1), { ...last, text: (last.text ?? '') + e.text }] };
       return push(s, { from: 'bot', kind: 'text', text: e.text, streaming: true });
     }
     case 'done': {
@@ -203,7 +167,7 @@ function onEvent(s: State, e: StreamEvent): State {
       return last?.kind === 'text' && last.streaming ? { ...s, messages: [...s.messages.slice(0, -1), { ...last, streaming: false }] } : s;
     }
     case 'record_ready':
-      return push(s, { from: 'bot', kind: 'text', text: 'Toutes les pages sont analysées.' });
+      return push(s, { from: 'bot', kind: 'text', key: 'msg.all_read' });
     default:
       return s; // pings
   }
@@ -268,44 +232,42 @@ export interface LinkButton {
 }
 
 /**
- * The buttons of a link question. The 4-button question is [Patient 1] [Patient 2] [Aucune, créer] [Je ne sais pas]
- * (one Patient button per candidate); a single proposed candidate is one tap away. Typing the key has a form, no buttons.
+ * The buttons of a link question: one per candidate (the proposed one first and highlighted), « Nouvelle patiente », and
+ * « Je ne suis pas sûre ». Confirming a doubtful fiche reading has its yes / no; typing the key has a form, no buttons.
  */
 export function linkButtons(p: LinkProposal): LinkButton[] {
-  const create: LinkButton = { id: 'create_new', label: p.question === 'create' ? 'Créer un nouveau dossier' : p.question === 'propose' ? 'Non, créer un nouveau dossier' : 'Aucune, créer', decision: { kind: 'create_new' } };
-  const unsure: LinkButton = { id: 'not_sure', label: 'Je ne sais pas', decision: { kind: 'not_sure' } };
+  const create: LinkButton = { id: 'create_new', label: t('match.create'), decision: { kind: 'create_new' } };
+  const unsure: LinkButton = { id: 'not_sure', label: t('match.not_sure'), decision: { kind: 'not_sure' } };
   switch (p.question) {
     case 'need_key':
       return [];
     case 'confirm_fiche':
-      return [{ id: 'confirm_fiche', label: "Oui, c'est correct" }, { id: 'retype', label: 'Non, je la saisis' }];
+      return [{ id: 'confirm_fiche', label: t('match.confirm_yes') }, { id: 'retype', label: t('match.confirm_no') }];
     case 'propose':
-      return [{ id: 'patient', label: `Oui, c'est le dossier ${p.candidates[0].patient_id}`, decision: { kind: 'patient', patient_id: p.candidates[0].patient_id } }, create, unsure];
+      return [{ id: 'patient', label: t('match.pick_propose', { id: p.candidates[0].patient_id }), decision: { kind: 'patient', patient_id: p.candidates[0].patient_id } }, create, unsure];
     case 'create':
       return [create, unsure];
     case 'choose':
-      return [...p.candidates.map((c, i): LinkButton => ({ id: 'patient', label: `Patient ${i + 1}`, decision: { kind: 'patient', patient_id: c.patient_id } })), create, unsure];
+      return [...p.candidates.map((c): LinkButton => ({ id: 'patient', label: t('match.pick', { id: c.patient_id }), decision: { kind: 'patient', patient_id: c.patient_id } })), create, unsure];
   }
 }
 
-const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`;
-
 /** What the bot says once the decision is stored. */
 export function linkResultText(r: LinkResult): string {
-  if (r.status === 'not_sure' || !r.patient) return "D'accord : ces pages sont mises de côté pour vérification (doublon possible). Rien n'est créé ni lié.";
+  if (r.status === 'not_sure' || !r.patient) return t('match.done_parked');
   const visits = r.visits ?? 1;
-  return `Dossier ${r.patient.id} ${visits > 1 ? 'mis à jour' : 'créé'} (${plural(visits, 'visite')})`;
+  return visits > 1 ? t('match.done_updated', { id: r.patient.id, n: visits }) : t('match.done_created', { id: r.patient.id });
 }
 
 /** Short label of a page in the page list. */
 export function pageStateLabel(page: PageView, progress?: PageProgress): string {
-  if (page.superseded) return 'remplacée';
-  if (progress?.state === 'DUPLICATE_SUSPECTED') return 'à vérifier (doublon ?)';
-  if (progress && ['PATIENT_MATCHED', 'REGISTERED', 'SYNCED'].includes(progress.state)) return 'dossier enregistré';
-  if (page.validated || progress?.state === 'VALIDATED') return 'validée';
-  if (page.failed) return 'échec';
-  if (page.fields === null) return 'analyse en cours';
-  return progress ? `${progress.done}/${progress.total} vérifiés` : 'lue';
+  if (page.superseded) return t('pagestate.superseded');
+  if (progress?.state === 'DUPLICATE_SUSPECTED') return t('pagestate.duplicate');
+  if (progress && ['PATIENT_MATCHED', 'REGISTERED', 'SYNCED'].includes(progress.state)) return t('pagestate.registered');
+  if (page.validated || progress?.state === 'VALIDATED') return t('pagestate.validated');
+  if (page.failed) return t('pagestate.failed');
+  if (page.fields === null) return t('pagestate.reading');
+  return progress ? t('pagestate.progress', { done: progress.done, total: progress.total }) : t('pagestate.read');
 }
 
 /**
@@ -315,35 +277,36 @@ export function pageStateLabel(page: PageView, progress?: PageProgress): string 
 export function queueLabel(item: QueueEntry, ctx: { offline: boolean; sending: boolean; analysed: boolean }): string | null {
   switch (item.state) {
     case 'SYNC_FAILED':
-      return `Échec d'envoi : ${errorText(item.error ?? 'http_error')}`;
+      return t('queue.failed', { reason: errorText(item.error ?? 'http_error') });
     case 'UPLOADED':
-      return ctx.analysed ? null : 'Envoyée — analyse en cours';
+      return ctx.analysed ? null : t('queue.sent');
     case 'CAPTURED':
-      if (ctx.sending) return 'Envoi en cours…';
-      return ctx.offline || item.attempts > 0 ? 'En attente de traitement IA' : "Enregistrée sur l'appareil (chiffrée)";
+      if (ctx.sending) return t('queue.sending');
+      return ctx.offline || item.attempts > 0 ? t('queue.waiting') : t('queue.stored');
   }
 }
 
 export function reducer(s: State, a: Action): State {
   switch (a.type) {
     case 'session_started': // a new session: its own page list, review and link (the conversation and its page views stay)
-      return push({ ...initialState, messages: s.messages, pages: s.pages, session: a.session }, { from: 'bot', kind: 'text', text: 'Session démarrée. Photographiez une page du registre.' });
+      return push({ ...initialState, messages: s.messages, pages: s.pages, session: a.session }, { from: 'bot', kind: 'text', key: 'msg.session_started' });
     case 'say':
-      return push(s, { from: a.from, kind: 'text', text: a.text, hint: a.hint });
+      return push(s, { from: a.from, kind: 'text', ...('key' in a ? { key: a.key, params: a.params } : { text: a.text }) });
     case 'session_restored': {
       if (s.session) return s; // already restored (effects may run twice)
       let next: State = { ...s, session: a.session };
       for (const p of a.pages) next = patchPage({ ...next, order: [...next.order, p.id] }, p.id, () => ({ pageType: p.pageType }));
       for (const p of a.pages) if (p.replaces) next = patchPage(next, p.replaces, () => ({ superseded: true }));
-      return push(next, { from: 'bot', kind: 'text', text: 'Session reprise. Les pages en attente seront envoyées dès que la connexion le permet.' });
+      return push(next, { from: 'bot', kind: 'text', key: 'msg.session_restored' });
     }
     case 'page_added': {
       const added = patchPage({ ...s, order: [...s.order, a.pageId] }, a.pageId, () => ({ pageType: a.pageType }));
       return push(a.replaces ? patchPage(added, a.replaces, () => ({ superseded: true })) : added, {
         from: 'user',
         kind: 'text',
-        text: `${a.replaces ? 'Nouvelle photo enregistrée' : 'Photo enregistrée'} : page ${a.pageType}, ${pageLabel(a.pageType)}`,
-        hint: `Enregistrée sur l'appareil (chiffrée), envoyée dès que la connexion le permet.${a.replaces ? ' Elle remplace la photo précédente.' : ''}`,
+        key: a.replaces ? 'msg.photo_replaced' : 'msg.photo_saved',
+        params: { type: a.pageType, pageType: a.pageType },
+        hint: a.replaces ? 'msg.photo_replaced_hint' : 'msg.photo_saved_hint',
       });
     }
     case 'review_loaded':
@@ -353,7 +316,7 @@ export function reducer(s: State, a: Action): State {
     case 'field_updated':
       return patchPage(s, a.pageId, (p) => ({ fields: p.fields?.map((f) => (f.field_id === a.field.field_id ? a.field : f)) ?? null }));
     case 'page_confirmed':
-      return push(patchPage(s, a.pageId, () => ({ validated: true })), { from: 'bot', kind: 'text', text: 'Page confirmée.' });
+      return push(patchPage(s, a.pageId, () => ({ validated: true })), { from: 'bot', kind: 'text', key: 'msg.page_confirmed' });
     case 'link_proposal':
       return push({ ...s, link: { ...s.link, proposal: a.proposal } }, { from: 'bot', kind: 'link', proposal: a.proposal });
     case 'link_decided': {
